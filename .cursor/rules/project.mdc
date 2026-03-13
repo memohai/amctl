@@ -1,0 +1,43 @@
+---
+description: amctl project global rules
+alwaysApply: true
+---
+
+# amctl Project Rules
+
+## Overview
+
+amctl is an Android device remote control solution exposing MCP protocol tools for AI agents.
+
+- **v1** (complete): Accessibility Service based, 17 MCP tools
+- **v2** (in progress): Headless direct control via Shizuku shell permissions + system-level APIs
+- **v2-ROM** (planned): Custom AOSP ROM, ultimate solution
+
+## Documentation
+
+- `docs/DESIGN.md` — v1 architecture
+- `docs/PLAN.md` — v1 implementation plan
+- `docs/DESIGN-V2-HEADLESS.md` — v2 headless design
+- `docs/PLAN-V2-HEADLESS.md` — v2 headless plan
+- `docs/DESIGN-V2-ROM.md` — Custom ROM design
+- `docs/PLAN-V2.md` — Custom ROM plan
+
+## Tech Stack
+
+- Kotlin 2.3 + Android SDK (minSdk 33, targetSdk 34)
+- Jetpack Compose (Material Design 3) + Hilt DI
+- Ktor Server (Netty) + MCP Kotlin SDK 0.8.3
+- Shizuku (v2 shell permissions)
+- Build: Gradle 8.14 (Kotlin DSL) + just (not make)
+
+## Coding Conventions
+
+- Define `interface`, implement with `Impl` suffix, bind via Hilt `@Binds`
+- Package: `com.example.amctl`
+- Coroutines: `viewModelScope` in ViewModel, custom `CoroutineScope` in Service
+- Thread safety: `@Volatile` for `AccessibilityService.instance`
+- Respond in Simplified Chinese
+
+## Target Hardware
+
+RhinoPi X1: Qualcomm QCS8550 (ARM64), 16GB LPDDR5X, Adreno 740 GPU

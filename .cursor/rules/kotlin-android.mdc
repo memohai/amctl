@@ -1,0 +1,41 @@
+---
+description: Kotlin Android coding rules
+globs: "**/*.kt"
+alwaysApply: false
+---
+
+# Kotlin Android Rules
+
+## Dependency Injection
+
+```kotlin
+// ✅ Interface + Impl + Hilt binding
+interface ScreenCaptureProvider {
+    suspend fun capture(): ScreenshotData?
+}
+
+class ScreenCaptureProviderImpl @Inject constructor() : ScreenCaptureProvider { ... }
+
+// In AppModule
+@Binds abstract fun bindScreenCapture(impl: ScreenCaptureProviderImpl): ScreenCaptureProvider
+```
+
+## Hidden API Reflection (v2)
+
+```kotlin
+// ✅ Must try-catch + fallback
+fun capture(): Bitmap? = try {
+    SurfaceControl::class.java
+        .getMethod("screenshot", ...)
+        .invoke(null, ...) as? Bitmap
+} catch (e: Exception) {
+    Log.w("amctl", "SurfaceControl.screenshot() failed, falling back", e)
+    null // caller degrades to shell command or Accessibility
+}
+```
+
+## MCP Tools
+
+- Tool interfaces are stable (shared by v1/v2); only internal routing changes via ToolRouter
+- Parameter validation happens in the tool layer, not in providers
+- Errors returned as `CallToolResult(isError = true)` + `TextContent`
