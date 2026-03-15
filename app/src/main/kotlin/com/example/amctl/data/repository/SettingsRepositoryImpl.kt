@@ -23,11 +23,16 @@ class SettingsRepositoryImpl
             dataStore.data.map { prefs -> mapPreferencesToServerConfig(prefs) }
 
         override suspend fun getServerConfig(): ServerConfig {
-            val config = dataStore.data.first().let { mapPreferencesToServerConfig(it) }
+            var config = dataStore.data.first().let { mapPreferencesToServerConfig(it) }
             if (config.bearerToken.isEmpty()) {
                 val token = UUID.randomUUID().toString()
                 updateBearerToken(token)
-                return config.copy(bearerToken = token)
+                config = config.copy(bearerToken = token)
+            }
+            if (config.restBearerToken.isEmpty()) {
+                val token = UUID.randomUUID().toString()
+                updateRestBearerToken(token)
+                config = config.copy(restBearerToken = token)
             }
             return config
         }
@@ -54,6 +59,20 @@ class SettingsRepositoryImpl
             dataStore.edit { it[AUTO_START_KEY] = enabled }
         }
 
+        override suspend fun updateRestPort(port: Int) {
+            dataStore.edit { it[REST_PORT_KEY] = port }
+        }
+
+        override suspend fun updateRestBearerToken(token: String) {
+            dataStore.edit { it[REST_BEARER_TOKEN_KEY] = token }
+        }
+
+        override suspend fun generateNewRestBearerToken(): String {
+            val token = UUID.randomUUID().toString()
+            updateRestBearerToken(token)
+            return token
+        }
+
         override fun validatePort(port: Int): Result<Int> =
             if (port in ServerConfig.MIN_PORT..ServerConfig.MAX_PORT) {
                 Result.success(port)
@@ -68,12 +87,14 @@ class SettingsRepositoryImpl
         private fun mapPreferencesToServerConfig(prefs: Preferences): ServerConfig {
             val bindingAddressName = prefs[BINDING_ADDRESS_KEY] ?: BindingAddress.LOCALHOST.name
             return ServerConfig(
-                port = prefs[PORT_KEY] ?: ServerConfig.DEFAULT_PORT,
+                port = prefs[PORT_KEY] ?: ServerConfig.DEFAULT_MCP_PORT,
                 bindingAddress =
                     BindingAddress.entries.firstOrNull { it.name == bindingAddressName }
                         ?: BindingAddress.LOCALHOST,
                 bearerToken = prefs[BEARER_TOKEN_KEY] ?: "",
                 autoStartOnBoot = prefs[AUTO_START_KEY] ?: false,
+                restPort = prefs[REST_PORT_KEY] ?: ServerConfig.DEFAULT_REST_PORT,
+                restBearerToken = prefs[REST_BEARER_TOKEN_KEY] ?: "",
             )
         }
 
@@ -82,5 +103,7 @@ class SettingsRepositoryImpl
             private val BINDING_ADDRESS_KEY = stringPreferencesKey("binding_address")
             private val BEARER_TOKEN_KEY = stringPreferencesKey("bearer_token")
             private val AUTO_START_KEY = booleanPreferencesKey("auto_start_on_boot")
+            private val REST_PORT_KEY = intPreferencesKey("rest_port")
+            private val REST_BEARER_TOKEN_KEY = stringPreferencesKey("rest_bearer_token")
         }
     }

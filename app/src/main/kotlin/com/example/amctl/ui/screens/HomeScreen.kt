@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.amctl.data.model.ServerStatus
 import com.example.amctl.ui.components.ConfigurationSection
+import com.example.amctl.ui.components.RestConfigurationSection
 import com.example.amctl.ui.components.ServerStatusCard
 import com.example.amctl.ui.viewmodels.MainViewModel
 
@@ -37,11 +38,13 @@ import com.example.amctl.ui.viewmodels.MainViewModel
 fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
     val serverConfig by viewModel.serverConfig.collectAsState()
     val serverStatus by viewModel.serverStatus.collectAsState()
+    val restServerStatus by viewModel.restServerStatus.collectAsState()
     val deviceIp by viewModel.deviceIp.collectAsState()
     val shizukuStatus by viewModel.shizukuStatus.collectAsState()
     val controlMode by viewModel.controlMode.collectAsState()
     val context = LocalContext.current
-    val isRunning = serverStatus is ServerStatus.Running
+    val isMcpRunning = serverStatus is ServerStatus.Running
+    val isRestRunning = restServerStatus is ServerStatus.Running
 
     Scaffold(
         topBar = {
@@ -57,6 +60,7 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ServerStatusCard(
+                title = "MCP Server",
                 serverStatus = serverStatus,
                 onToggle = { enabled ->
                     if (enabled) viewModel.startServer() else viewModel.stopServer()
@@ -65,10 +69,25 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
 
             ConfigurationSection(
                 config = serverConfig,
-                isServerRunning = isRunning,
+                isServerRunning = isMcpRunning,
                 onPortChange = viewModel::updatePort,
                 onBindingAddressChange = viewModel::updateBindingAddress,
                 onRegenerateToken = viewModel::generateNewBearerToken,
+            )
+
+            ServerStatusCard(
+                title = "REST API Server",
+                serverStatus = restServerStatus,
+                onToggle = { enabled ->
+                    if (enabled) viewModel.startRestServer() else viewModel.stopRestServer()
+                },
+            )
+
+            RestConfigurationSection(
+                config = serverConfig,
+                isServerRunning = isRestRunning,
+                onPortChange = viewModel::updateRestPort,
+                onRegenerateToken = viewModel::generateNewRestBearerToken,
             )
 
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -130,8 +149,8 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Connection Info", style = MaterialTheme.typography.titleMedium)
                     Text("Device IP: ${deviceIp ?: "Unknown"}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Port: ${serverConfig.port}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Token: ${serverConfig.bearerToken.take(8)}...", style = MaterialTheme.typography.bodyMedium)
+                    Text("MCP: port ${serverConfig.port}, token ${serverConfig.bearerToken.take(8)}...", style = MaterialTheme.typography.bodyMedium)
+                    Text("REST: port ${serverConfig.restPort}, token ${serverConfig.restBearerToken.take(8)}...", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

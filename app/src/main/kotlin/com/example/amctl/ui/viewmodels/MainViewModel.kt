@@ -10,6 +10,7 @@ import com.example.amctl.data.model.ServerStatus
 import com.example.amctl.data.repository.SettingsRepository
 import com.example.amctl.services.accessibility.AmctlAccessibilityService
 import com.example.amctl.services.mcp.McpServerService
+import com.example.amctl.services.rest.RestServerService
 import com.example.amctl.services.system.ShizukuProvider
 import com.example.amctl.services.system.ToolRouter
 import com.example.amctl.utils.NetworkUtils
@@ -38,6 +39,8 @@ class MainViewModel
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ServerConfig())
 
         val serverStatus: StateFlow<ServerStatus> = McpServerService.serverStatus
+
+        val restServerStatus: StateFlow<ServerStatus> = RestServerService.serverStatus
 
         private val _deviceIp = MutableStateFlow(NetworkUtils.getDeviceIpAddress())
         val deviceIp: StateFlow<String?> = _deviceIp.asStateFlow()
@@ -87,6 +90,20 @@ class MainViewModel
             application.startService(intent)
         }
 
+        fun startRestServer() {
+            val intent = Intent(application, RestServerService::class.java).apply {
+                action = RestServerService.ACTION_START
+            }
+            application.startForegroundService(intent)
+        }
+
+        fun stopRestServer() {
+            val intent = Intent(application, RestServerService::class.java).apply {
+                action = RestServerService.ACTION_STOP
+            }
+            application.startService(intent)
+        }
+
         fun updatePort(port: Int) {
             settingsRepository.validatePort(port).onSuccess {
                 viewModelScope.launch { settingsRepository.updatePort(it) }
@@ -99,6 +116,16 @@ class MainViewModel
 
         fun generateNewBearerToken() {
             viewModelScope.launch { settingsRepository.generateNewBearerToken() }
+        }
+
+        fun updateRestPort(port: Int) {
+            settingsRepository.validatePort(port).onSuccess {
+                viewModelScope.launch { settingsRepository.updateRestPort(it) }
+            }
+        }
+
+        fun generateNewRestBearerToken() {
+            viewModelScope.launch { settingsRepository.generateNewRestBearerToken() }
         }
 
         fun refreshDeviceIp() {

@@ -33,6 +33,11 @@
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
+        <service
+            android:name=".services.rest.RestServerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"

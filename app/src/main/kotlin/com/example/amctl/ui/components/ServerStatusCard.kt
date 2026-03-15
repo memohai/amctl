@@ -21,6 +21,7 @@ fun ServerStatusCard(
     serverStatus: ServerStatus,
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    title: String = "MCP Server",
 ) {
     val isRunning = serverStatus is ServerStatus.Running
     val isTransitioning = serverStatus is ServerStatus.Starting || serverStatus is ServerStatus.Stopping
@@ -44,7 +45,7 @@ fun ServerStatusCard(
         ) {
             Column {
                 Text(
-                    text = "MCP Server",
+                    text = title,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(

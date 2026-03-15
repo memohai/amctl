@@ -13,6 +13,9 @@ interface SettingsRepository {
     suspend fun updateBearerToken(token: String)
     suspend fun generateNewBearerToken(): String
     suspend fun updateAutoStartOnBoot(enabled: Boolean)
+    suspend fun updateRestPort(port: Int)
+    suspend fun updateRestBearerToken(token: String)
+    suspend fun generateNewRestBearerToken(): String
 
     fun validatePort(port: Int): Result<Int>
 }
