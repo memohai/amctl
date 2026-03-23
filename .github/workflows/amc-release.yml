@@ -1,0 +1,122 @@
+name: amc-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "amc-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build-${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            bin_name: amc
+            ext: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            bin_name: amc
+            ext: tar.gz
+          - os: macos-13
+            target: x86_64-apple-darwin
+            bin_name: amc
+            ext: tar.gz
+          - os: macos-14
+            target: aarch64-apple-darwin
+            bin_name: amc
+            ext: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin_name: amc.exe
+            ext: zip
+
+    defaults:
+      run:
+        working-directory: cli
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Zig for linux-musl cross build
+        if: contains(matrix.target, 'linux-musl')
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install cargo-zigbuild
+        if: contains(matrix.target, 'linux-musl')
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+
+      - name: Build (linux-musl)
+        if: contains(matrix.target, 'linux-musl')
+        run: cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Build (native)
+        if: ${{ !contains(matrix.target, 'linux-musl') }}
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME:-amc-dev}"
+          ARCHIVE="amc-${VERSION}-${{ matrix.target }}.tar.gz"
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${{ matrix.bin_name }}"
+          cp README.md dist/README.md
+          cp ../LICENSE dist/LICENSE
+          tar -C dist -czf "${ARCHIVE}" .
+          rm -rf dist
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "amc-dev" }
+          $Archive = "amc-$Version-${{ matrix.target }}.zip"
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${{ matrix.bin_name }}"
+          Copy-Item "README.md" "dist/README.md"
+          Copy-Item "../LICENSE" "dist/LICENSE"
+          Compress-Archive -Path "dist/*" -DestinationPath $Archive
+          Remove-Item -Recurse -Force dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: amc-${{ matrix.target }}
+          path: cli/amc-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/**/*
