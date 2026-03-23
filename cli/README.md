@@ -32,11 +32,3 @@ cargo run -- act tap --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN" --x
 - 失败：`{"ok":false,"code":"...",...}`
 
 支持 `Ctrl+C`（SIGINT）中断，返回 `code="INTERRUPTED"`，进程退出码为 `130`。
-
-## 会话落盘
-
-每次调用会写入：
-
-- `.amctl-sessions/<session>/commands/*_input.json`
-- `.amctl-sessions/<session>/commands/*_output.json`
-- `.amctl-sessions/<session>/commands/*_error.json`
