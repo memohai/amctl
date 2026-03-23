@@ -25,11 +25,11 @@ jobs:
             target: aarch64-unknown-linux-musl
             bin_name: amc
             ext: tar.gz
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             bin_name: amc
             ext: tar.gz
-          - os: macos-14
+          - os: macos-15
             target: aarch64-apple-darwin
             bin_name: amc
             ext: tar.gz
