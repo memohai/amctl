@@ -1,34 +1,63 @@
 # amc CLI (Rust)
 
-`amc` 是 `amctl` 的 deterministic CLI 执行器（Rust 版本）。
+`amc` is the deterministic CLI executor for the amctl REST service.
 
-## 构建
+## Build
 
 ```bash
 cd cli
-cargo build
+cargo build --release
 ```
 
-## 运行
+## Run
+
+You can pass connection settings via flags or environment variables.
+
+### Option A: environment variables
 
 ```bash
-cargo run -- preflight --base-url http://127.0.0.1:8081
-cargo run -- act tap --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN" --x 540 --y 1200
+export AMC_URL="http://127.0.0.1:8081"
+export AMC_TOKEN="<token>"
+export AMC_DB="./amc.db"
+
+./target/release/amc health
+./target/release/amc observe screen --max-rows 80 --fields id,text,desc,resId,flags
+./target/release/amc act tap --x 540 --y 1200
 ```
 
-## 命令集
+### Option B: explicit flags
 
-- `preflight`
-- `act tap` / `act swipe` / `act back` / `act home` / `act text` / `act launch` / `act stop` / `act key`
-- `observe screen` / `observe screenshot` / `observe top`
-- `verify text-contains` / `verify top-activity` / `verify node-exists`
-- `recover back` / `recover home` / `recover relaunch`
+```bash
+./target/release/amc --url http://127.0.0.1:8081 --token "<token>" health
+./target/release/amc --url http://127.0.0.1:8081 --token "<token>" observe top
+```
 
-## 输出格式
+## Command groups
 
-每条命令输出一行 JSON：
+- `health`
+- `act`:
+  - `tap`, `swipe`, `back`, `home`, `text`, `launch`, `stop`, `key`
+- `observe`:
+  - `screen`, `overlay`, `screenshot`, `top`
+- `verify`:
+  - `text-contains`, `top-activity`, `node-exists`
+- `recover`:
+  - `back`, `home`, `relaunch`
 
-- 成功：`{"ok":true,"code":"OK",...}`
-- 失败：`{"ok":false,"code":"...",...}`
+## Output and exit code
 
-支持 `Ctrl+C`（SIGINT）中断，返回 `code="INTERRUPTED"`，进程退出码为 `130`。
+Each command prints one JSON line.
+
+- `status="ok"`: success, exit code `0`
+- `status="failed"`: error, exit code `1`
+- `status="interrupted"`: interrupted (SIGINT), exit code `130`
+
+## Common options
+
+- `--url <URL>` (or `AMC_URL`)
+- `--token <TOKEN>` (or `AMC_TOKEN`)
+- `--timeout-ms <MS>`
+- `--proxy <system|direct|auto>`
+- `--trace-db <PATH>` (or `AMC_DB`)
+- `--no-trace`
+- `--session <NAME>`

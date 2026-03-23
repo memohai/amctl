@@ -6,7 +6,7 @@ amctl — Android device remote control via MCP protocol, targeting RhinoPi X1 (
 
 ## Context
 
-Read `docs/` DESIGN and PLAN documents before making changes. Current focus is the v2 headless direct control approach (`DESIGN-V2-HEADLESS.md`).
+Read `docs/ARCHITECTURE.md` before making changes. It is the single source of truth for current architecture.
 
 ## Current Baseline
 
