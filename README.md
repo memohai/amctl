@@ -4,6 +4,19 @@ English | [中文](./README_ZH.md)
 
 amctl is an Android device control service with a deterministic CLI client (`amc`).
 
+## Build from source requirements
+
+If you want to build from source (APK or CLI), prepare:
+
+- JDK 17
+- Android SDK (with `adb`)
+- Rust toolchain (`cargo`)
+- `just`
+
+Recommended environment:
+
+- `ANDROID_HOME` points to your Android SDK path
+
 ## Quickstart
 
 ### 1) Deploy service on Android device

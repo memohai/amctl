@@ -4,6 +4,19 @@
 
 amctl 是一个 Android 设备控制服务，配套确定性 CLI 客户端 `amc`。
 
+## 源码构建要求
+
+如果你要从源码构建（APK 或 CLI），请先准备：
+
+- JDK 17
+- Android SDK（包含 `adb`）
+- Rust 工具链（`cargo`）
+- `just`
+
+推荐环境变量：
+
+- `ANDROID_HOME` 指向你的 Android SDK 路径
+
 ## 快速开始
 
 ### 1）在 Android 设备上部署服务
