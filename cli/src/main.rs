@@ -2,21 +2,29 @@ mod api;
 mod builder;
 mod cli;
 mod core;
+mod memory;
 
 use clap::Parser;
 use crossbeam_channel::{Receiver, bounded, select};
 use reqwest::blocking::Client;
 use serde_json::{Value, json};
 use std::process;
+use std::time::Instant;
 
 use crate::api::request::{ApiClient, ApiError, ApiErrorKind};
 use crate::builder::ReqClientBuilder;
 use crate::cli::{ActCommands, Cli, Commands, ObserveCommands, RecoverCommands, VerifyCommands};
 use crate::core::error_code::ErrorCode;
+use crate::memory::{TraceRecord, TraceStore};
 
 fn main() -> anyhow::Result<()> {
     let ctrl_c_events = ctrl_channel()?;
     let cli = Cli::parse();
+    let trace_store = if cli.no_trace {
+        None
+    } else {
+        Some(TraceStore::new(cli.trace_db.clone())?)
+    };
 
     let runtime = ReqClientBuilder::new(
         cli.url.trim_end_matches('/').to_string(),
@@ -27,7 +35,9 @@ fn main() -> anyhow::Result<()> {
 
     let client = runtime.build()?;
 
+    let started = Instant::now();
     let result = run_command(&client, &runtime, &ctrl_c_events, &cli.command);
+    persist_trace(&trace_store, &cli, &runtime.session_id, &result, started.elapsed().as_millis());
     println!("{}", serde_json::to_string(&result)?);
 
     let exit_code = match result.get("status").and_then(|x| x.as_str()) {
@@ -39,6 +49,41 @@ fn main() -> anyhow::Result<()> {
         process::exit(exit_code);
     }
     Ok(())
+}
+
+fn persist_trace(
+    trace_store: &Option<TraceStore>,
+    cli: &Cli,
+    trace_id: &str,
+    result: &Value,
+    duration_ms: u128,
+) {
+    let Some(store) = trace_store else {
+        return;
+    };
+
+    let status = result
+        .get("status")
+        .and_then(|x| x.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let output_json = match serde_json::to_string(result) {
+        Ok(v) => v,
+        Err(e) => format!(r#"{{"traceSerializeError":"{e}"}}"#),
+    };
+    let command = format!("{:?}", cli.command);
+    let record = TraceRecord {
+        created_at: chrono::Utc::now().to_rfc3339(),
+        session: cli.session.clone(),
+        trace_id: trace_id.to_string(),
+        command,
+        status,
+        output_json,
+        duration_ms,
+    };
+    if let Err(e) = store.record(&record) {
+        eprintln!("warn: failed to persist trace: {e}");
+    }
 }
 
 fn run_command(

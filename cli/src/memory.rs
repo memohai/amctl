@@ -1,45 +1,67 @@
 use anyhow::Context;
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 use std::path::PathBuf;
 
 #[derive(Debug)]
-pub struct SqliteConnection {
-    path: PathBuf,
-    connection: rusqlite::Connection,
+pub struct TraceStore {
+    connection: Connection,
 }
 
-impl SqliteConnection {
+#[derive(Debug, Clone)]
+pub struct TraceRecord {
+    pub created_at: String,
+    pub session: String,
+    pub trace_id: String,
+    pub command: String,
+    pub status: String,
+    pub output_json: String,
+    pub duration_ms: u128,
+}
+
+impl TraceStore {
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
-        let connection = rusqlite::Connection::open(&path)
+        let connection = Connection::open(&path)
             .with_context(|| format!("failed to connect to sqlite database at {:?}", path))?;
-        Self::connection_init(&connection)?;
-        Ok(SqliteConnection { path, connection })
+        init_trace_table(&connection)?;
+        Ok(Self { connection })
     }
 
-    fn connection_init(connection: &Connection) -> anyhow::Result<()> {
-        Self::init_trace_table(connection)?;
-        Ok(())
-    }
-
-    fn init_trace_table(connection: &Connection) -> anyhow::Result<()> {
-        connection
-            .execute(
-                "CREATE TABLE IF NOT EXISTS traces (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    trace TEXT NOT NULL
-                )",
-                [],
-            )
-            .with_context(|| "failed to create traces table")?;
-        Ok(())
-    }
-
-    pub fn trace(&self, message: &str) -> anyhow::Result<()> {
+    pub fn record(&self, record: &TraceRecord) -> anyhow::Result<()> {
         self.connection
-            .execute("INSERT INTO traces (trace) VALUES (?1)", &[message])
-            .with_context(|| "failed to insert trace into database")?;
+            .execute(
+                "INSERT INTO traces (
+                    created_at, session, trace_id, command, status, output_json, duration_ms
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    record.created_at,
+                    record.session,
+                    record.trace_id,
+                    record.command,
+                    record.status,
+                    record.output_json,
+                    record.duration_ms as i64
+                ],
+            )
+            .with_context(|| "failed to insert trace record")?;
         Ok(())
     }
 }
 
-pub struct Memory {}
+fn init_trace_table(connection: &Connection) -> anyhow::Result<()> {
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                session TEXT NOT NULL,
+                trace_id TEXT NOT NULL,
+                command TEXT NOT NULL,
+                status TEXT NOT NULL,
+                output_json TEXT NOT NULL,
+                duration_ms INTEGER NOT NULL
+            )",
+            [],
+        )
+        .with_context(|| "failed to create traces table")?;
+    Ok(())
+}
