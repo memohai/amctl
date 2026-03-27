@@ -16,16 +16,12 @@ function detectLibc() {
 
 function resolvePackageName() {
   const key = `${process.platform}-${process.arch}`;
-  const libc = detectLibc();
-  if (key === 'linux-x64' && libc === 'musl') return '@memohai/af-linux-x64-musl';
-  if (key === 'linux-arm64' && libc === 'musl') return '@memohai/af-linux-arm64-musl';
+  if (key === 'linux-x64') return '@memohai/af-linux-x64-musl';
+  if (key === 'linux-arm64') return '@memohai/af-linux-arm64-musl';
   if (key === 'darwin-x64') return '@memohai/af-darwin-x64';
   if (key === 'darwin-arm64') return '@memohai/af-darwin-arm64';
   if (key === 'win32-x64') return '@memohai/af-win32-x64-msvc';
-
-  if (process.platform === 'linux' && libc === 'gnu') {
-    throw new Error(`Unsupported platform: ${process.platform}-${process.arch}-${libc}. Only musl Linux builds are published currently.`);
-  }
+  const libc = detectLibc();
   throw new Error(`Unsupported platform: ${process.platform}-${process.arch}${libc ? `-${libc}` : ''}`);
 }
 

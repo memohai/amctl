@@ -5,7 +5,6 @@
   "license": "Apache-2.0",
   "os": ["linux"],
   "cpu": ["arm64"],
-  "libc": ["musl"],
   "files": ["bin/af"],
   "publishConfig": {
     "access": "public"
