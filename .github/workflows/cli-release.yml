@@ -226,7 +226,7 @@ jobs:
             darwin-arm64 \
             win32-x64-msvc
           do
-            echo "Publishing @memohai/af-$pkg@$VERSION ($DIST_TAG)"
+            echo "Publishing @memohjs/af-$pkg@$VERSION ($DIST_TAG)"
             (cd "$WORKROOT/platforms/$pkg" && npm publish --access public --tag "$DIST_TAG")
           done
 
@@ -236,5 +236,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Publishing @memohai/af@$VERSION ($DIST_TAG)"
+          echo "Publishing @memohjs/af@$VERSION ($DIST_TAG)"
           (cd "$WORKROOT/meta" && npm publish --access public --tag "$DIST_TAG")

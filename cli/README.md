@@ -13,10 +13,10 @@ cargo build --release
 
 ```bash
 # rc channel
-npm i -g @memohai/af@rc
+npm i -g @memohjs/af@rc
 
 # stable channel
-npm i -g @memohai/af
+npm i -g @memohjs/af
 ```
 
 Then run:
