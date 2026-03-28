@@ -2,55 +2,37 @@
 
 [English](./README.md) | 中文
 
-Auto Fish 是一个 Android 设备控制服务，配套确定性 CLI 客户端 `af`。
-
-## 源码构建要求
-
-如果你要从源码构建（APK 或 CLI），请先准备：
-
-- JDK 17
-- Android SDK（包含 `adb`）
-- Rust 工具链（`cargo`）
-- `just`
-
-推荐环境变量：
-
-- `ANDROID_HOME` 指向你的 Android SDK 路径
+Auto Fish 用来控制 Android 设备，配套的命令行工具是 `af`。
 
 ## 快速开始
 
-### 1）在 Android 设备上部署服务
+### 1）从 GitHub Releases 安装 App（APK）
 
-#### 方式 A：安装预编译 APK
+先到 GitHub Releases 下载最新 APK 并安装：  
+https://github.com/memohai/Auto-Fish/releases
 
-安装 APK 并打开 App，然后完成以下步骤：
+打开 App 后按下面做：
 
 1. 为 Auto Fish 开启无障碍权限。
 2. 在首页打开 **服务** 开关。
-3. 记录 App 中显示的连接信息：
+3. 记下 App 里显示的连接信息：
    - 设备 IP
    - 端口
    - 令牌
 
-#### 方式 B：本地源码构建并安装
+### 2）通过 npm 安装 `af` CLI
 
 ```bash
-just build
-just install
+npm i -g @memohjs/af
 ```
 
-然后按上面相同步骤完成配置。
-
-### 2）安装并使用 `af` CLI
-
-源码构建：
+安装后先确认命令可用：
 
 ```bash
-cd cli
-cargo build --release
+af --help
 ```
 
-设置环境变量（替换为你的真实值）：
+再设置环境变量：
 
 ```bash
 export AF_URL="http://<设备IP>:<端口>"
@@ -58,15 +40,37 @@ export AF_TOKEN="<令牌>"
 export AF_DB="./af.db"
 ```
 
-执行首批命令：
+可以先跑这几条命令：
 
 ```bash
-./target/release/af health
-./target/release/af observe top
-./target/release/af observe screen --max-rows 80 --fields id,text,desc,resId,flags
-./target/release/af observe refs --max-rows 80
-./target/release/af act tap --x 540 --y 1200
-./target/release/af act tap --by text --value "设置"
+af health
+af observe top
+af observe screen --max-rows 80 --fields id,text,desc,resId,flags
+af observe refs --max-rows 80
+af act tap --x 540 --y 1200
+af act tap --by text --value "设置"
+```
+
+## 源码构建要求（可选）
+
+如果你想自己从源码构建 APK 或 CLI，需要先准备：
+
+- JDK 17
+- Android SDK（包含 `adb`）
+- Rust 工具链（`cargo`）
+- `just`
+
+建议设置：
+
+- `ANDROID_HOME` 指向你的 Android SDK 路径
+
+本地构建示例：
+
+```bash
+just build
+just install
+cd cli
+cargo build --release
 ```
 
 ## 常用 CLI 命令
@@ -84,8 +88,7 @@ af recover back --times 2
 
 说明：
 
-- 如果未设置 `AF_URL`，则必须传 `--url`。
-- 对受保护命令，如果未设置 `AF_TOKEN`，则必须传 `--token`。
+- 没有设置 `AF_URL` 或 `AF_TOKEN` 时，需要显式传 `--url` / `--token`。
 - 命令输出为单行 JSON。
 
 ## 开发者入口

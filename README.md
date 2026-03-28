@@ -4,26 +4,14 @@ English | [中文](./README_ZH.md)
 
 Auto Fish is an Android device control service with a deterministic CLI client (`af`).
 
-## Build from source requirements
-
-If you want to build from source (APK or CLI), prepare:
-
-- JDK 17
-- Android SDK (with `adb`)
-- Rust toolchain (`cargo`)
-- `just`
-
-Recommended environment:
-
-- `ANDROID_HOME` points to your Android SDK path
-
 ## Quickstart
 
-### 1) Deploy service on Android device
+### 1) Install app from GitHub Releases (APK)
 
-#### Option A: install a prebuilt APK
+Download and install the latest APK from GitHub Releases:  
+https://github.com/memohai/Auto-Fish/releases
 
-Install the APK, open the app, then do the following:
+Open the app, then:
 
 1. Enable accessibility permission for Auto Fish.
 2. In Home page, turn on **Service**.
@@ -32,25 +20,19 @@ Install the APK, open the app, then do the following:
    - Port
    - Token
 
-#### Option B: install from local source build
+### 2) Install `af` CLI from npm
 
 ```bash
-just build
-just install
+npm i -g @memohjs/af
 ```
 
-Then follow the same 3 steps above.
-
-### 2) Install and use `af` CLI
-
-Build from source:
+Then verify:
 
 ```bash
-cd cli
-cargo build --release
+af --help
 ```
 
-Set environment variables (replace with your actual values):
+Set environment variables:
 
 ```bash
 export AF_URL="http://<DEVICE_IP>:<PORT>"
@@ -61,12 +43,34 @@ export AF_DB="./af.db"
 Run first commands:
 
 ```bash
-./target/release/af health
-./target/release/af observe top
-./target/release/af observe screen --max-rows 80 --fields id,text,desc,resId,flags
-./target/release/af observe refs --max-rows 80
-./target/release/af act tap --x 540 --y 1200
-./target/release/af act tap --by text --value "Settings"
+af health
+af observe top
+af observe screen --max-rows 80 --fields id,text,desc,resId,flags
+af observe refs --max-rows 80
+af act tap --x 540 --y 1200
+af act tap --by text --value "Settings"
+```
+
+## Build from source requirements (optional)
+
+If you want to build APK or CLI from source, prepare:
+
+- JDK 17
+- Android SDK (with `adb`)
+- Rust toolchain (`cargo`)
+- `just`
+
+Recommended environment:
+
+- `ANDROID_HOME` points to your Android SDK path
+
+Local source build example:
+
+```bash
+just build
+just install
+cd cli
+cargo build --release
 ```
 
 ## Common CLI commands
@@ -84,8 +88,7 @@ af recover back --times 2
 
 Notes:
 
-- `--url` is required unless `AF_URL` is set.
-- `--token` is required for protected commands unless `AF_TOKEN` is set.
+- If `AF_URL` or `AF_TOKEN` is not set, pass `--url` / `--token` explicitly.
 - Command output is JSON (single line per command).
 
 ## For developers
