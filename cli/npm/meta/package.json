@@ -1,15 +1,15 @@
 {
   "name": "@memohjs/af",
   "version": "__VERSION__",
-  "description": "Auto Fish CLI",
+  "description": "Autofish CLI",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/memohai/Auto-Fish.git"
+    "url": "git+https://github.com/memohai/Autofish.git"
   },
-  "homepage": "https://github.com/memohai/Auto-Fish",
+  "homepage": "https://github.com/memohai/Autofish",
   "bugs": {
-    "url": "https://github.com/memohai/Auto-Fish/issues"
+    "url": "https://github.com/memohai/Autofish/issues"
   },
   "bin": {
     "af": "bin/af.js"

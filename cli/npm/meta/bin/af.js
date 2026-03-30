@@ -44,7 +44,7 @@ function main() {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[af npm] ${msg}`);
-    console.error('[af npm] Try downloading binary from GitHub Releases: https://github.com/memohai/Auto-Fish/releases');
+    console.error('[af npm] Try downloading binary from GitHub Releases: https://github.com/memohai/Autofish/releases');
     process.exit(1);
   }
 }

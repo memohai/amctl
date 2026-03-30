@@ -1,19 +1,19 @@
-# Auto Fish
+# Autofish
 
 English | [中文](./README_ZH.md)
 
-Auto Fish is an Android device control service with a deterministic CLI client (`af`).
+Autofish is an Android device control service with a deterministic CLI client (`af`).
 
 ## Quickstart
 
 ### 1) Install app from GitHub Releases (APK)
 
 Download and install the latest APK from GitHub Releases:  
-https://github.com/memohai/Auto-Fish/releases
+https://github.com/memohai/Autofish/releases
 
 Open the app, then:
 
-1. Enable accessibility permission for Auto Fish.
+1. Enable accessibility permission for Autofish.
 2. In Home page, turn on **Service**.
 3. Note the service connection info shown in app:
    - Device IP

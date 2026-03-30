@@ -1,19 +1,19 @@
-# Auto Fish
+# Autofish
 
 [English](./README.md) | 中文
 
-Auto Fish 用来控制 Android 设备，配套的命令行工具是 `af`。
+Autofish 用来控制 Android 设备，配套的命令行工具是 `af`。
 
 ## 快速开始
 
 ### 1）从 GitHub Releases 安装 App（APK）
 
 先到 GitHub Releases 下载最新 APK 并安装：  
-https://github.com/memohai/Auto-Fish/releases
+https://github.com/memohai/Autofish/releases
 
 打开 App 后按下面做：
 
-1. 为 Auto Fish 开启无障碍权限。
+1. 为 Autofish 开启无障碍权限。
 2. 在首页打开 **服务** 开关。
 3. 记下 App 里显示的连接信息：
    - 设备 IP

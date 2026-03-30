@@ -1,6 +1,6 @@
 # af CLI (Rust)
 
-`af` is the deterministic CLI executor for the Auto Fish REST service.
+`af` is the deterministic CLI executor for the Autofish Service.
 
 ## Build
 

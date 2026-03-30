@@ -2,7 +2,7 @@
 
 ## Project
 
-Auto Fish — Android device remote control via MCP protocol, targeting RhinoPi X1 (Qualcomm QCS8550 ARM64).
+Autofish — Android device remote control via remote control protocol, targeting RhinoPi X1 (Qualcomm QCS8550 ARM64).
 
 ## Context
 
@@ -11,15 +11,13 @@ Read `docs/ARCHITECTURE.md` before making changes. It is the single source of tr
 ## Current Baseline
 
 - Transport/API:
-  - MCP service: `McpServerService` + `/mcp`
-  - REST service: `RestServerService` + `/api/*`
+  - Service: `ServiceServerService` + `/api/*`
 - Execution path:
-  - Prefer v2: Shizuku + system/shell path
-  - Fallback to v1: Accessibility path
+  - Prefer: Shizuku + system/shell path
+  - Fallback: Accessibility path
   - Routing entry: `ToolRouter`
 - Architecture intent:
-  - v2 is an internal implementation upgrade on top of v1 compatibility
-  - Keep existing external tool interfaces stable unless design docs are updated first
+  - Keep existing external interfaces stable unless design docs are updated first
 
 ## Rules
 
@@ -27,16 +25,16 @@ Read `docs/ARCHITECTURE.md` before making changes. It is the single source of tr
 - Use `just` instead of `make` for build commands
 - Do not add features not listed in design documents
 - Hidden API reflection calls must have try-catch + fallback
-- v2 changes must not alter tool interfaces; only swap internal implementation paths, keeping v1 as fallback
+- Implementation changes must not alter external tool interfaces; keep fallback path runnable
 
 ## Change Process
 
 - If a requested feature is not in current design/plan docs:
   - Update relevant docs under `docs/` first (or in same change set), then implement.
   - If intentionally temporary, mark clearly as `experimental` in code/comments and PR description.
-- For v2-related refactors:
-  - Do not break existing MCP tool names/params/return schema.
-  - Maintain runnable fallback path when v2 capability is unavailable.
+- For internal refactors:
+  - Do not break existing tool names/params/return schema.
+  - Maintain runnable fallback path when preferred capability is unavailable.
 
 ## Quality Gates
 

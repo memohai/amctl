@@ -28,5 +28,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Auto-Fish"
+rootProject.name = "Autofish"
 include(":app")

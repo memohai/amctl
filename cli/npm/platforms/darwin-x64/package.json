@@ -1,7 +1,7 @@
 {
   "name": "@memohjs/af-darwin-x64",
   "version": "__VERSION__",
-  "description": "Auto Fish CLI binary for darwin x64",
+  "description": "Autofish CLI binary for darwin x64",
   "license": "Apache-2.0",
   "os": [
     "darwin"

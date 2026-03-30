@@ -1,7 +1,7 @@
 {
   "name": "@memohjs/af-linux-arm64-musl",
   "version": "__VERSION__",
-  "description": "Auto Fish CLI binary for linux arm64 musl",
+  "description": "Autofish CLI binary for linux arm64 musl",
   "license": "Apache-2.0",
   "os": [
     "linux"

@@ -34,7 +34,7 @@ pub enum ProxyMode {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "af", about = "Deterministic executor for Auto Fish REST API")]
+#[command(name = "af", about = "Deterministic executor for Autofish REST API")]
 pub struct Cli {
     #[arg(long, env = "AF_URL")]
     pub url: String,

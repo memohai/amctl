@@ -1,6 +1,6 @@
 # @memohjs/af
 
-Meta package for Auto Fish CLI.
+Meta package for Autofish CLI.
 
 Install:
 

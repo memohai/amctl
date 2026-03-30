@@ -17,6 +17,78 @@ RestServerService (foreground service)
   -> Android device
 ```
 
+## Refs Design
+
+Refs are human-facing aliases (`@n1`, `@n2`, ...) for clickable nodes in the current UI snapshot.
+They are designed for CLI usability, while execution correctness is enforced by server-side token resolution.
+
+### Goals
+
+- Keep CLI input simple (`--by ref --value @nK`).
+- Avoid stale-click mistakes when UI changes between observe and act.
+- Recover safely from pure ref reordering when node identity is still stable.
+
+### Observe Flow (`GET /api/screen/refs`)
+
+```mermaid
+flowchart TD
+    A[Collect current UI snapshot] --> B[Build clickable ref nodes]
+    B --> C[Sort nodes by focused/layer/top/left/area]
+    C --> D[Assign aliases @n1 @n2 ...]
+    D --> E[Build tokens per node]
+    E --> F[Store map: ref alias -> RefAliasToken]
+    F --> G[Return rows to CLI]
+```
+
+Server stores an in-memory map from alias to token pair:
+
+- `RefAliasToken.exactToken`: strict token, includes coarse bounds.
+- `RefAliasToken.identityToken`: recovery token, excludes absolute position and keeps semantic/interaction traits.
+
+### Act Flow (`POST /api/nodes/tap` with `by=ref`)
+
+```mermaid
+sequenceDiagram
+    participant C as CLI
+    participant S as Service
+
+    C->>S: tap(by=ref, value=@nK)
+    S->>S: lookup @nK in lastObservedRefTokenMap
+    alt alias not observed
+        S-->>C: 409 REF_ALIAS_UNOBSERVED
+    else alias found
+        S->>S: resolve latest refs state
+        S->>S: match exactToken first
+        alt exact hit
+            S-->>C: tap success
+        else exact miss
+            S->>S: match identityToken
+            alt unique identity hit
+                S-->>C: tap success
+            else none or multiple
+                S-->>C: 409 REF_ALIAS_STALE
+            end
+        end
+    end
+```
+
+### Token Semantics
+
+- `exactToken` is strict and position-sensitive (coarse bounds included), used as the first guardrail.
+- `identityToken` is position-insensitive (uses semantic fields + interaction flags + coarse size), used only as fallback.
+- Identity fallback is accepted only when it produces exactly one candidate.
+
+### Safety Rules
+
+- Never trust ref index alone after UI changes.
+- Never auto-pick among multiple identity candidates.
+- Prefer `REF_ALIAS_STALE` over uncertain execution.
+
+### Notes
+
+- `refVersion` is still returned for state introspection and diagnostics.
+- Ref replay correctness is based on server-side alias-token mapping, not client-side version comparison.
+
 ## Android APIs by purpose
 
 ### Position / bounds
