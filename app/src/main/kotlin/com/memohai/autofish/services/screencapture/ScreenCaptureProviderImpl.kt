@@ -1,8 +1,8 @@
 package com.memohai.autofish.services.screencapture
 
 import android.graphics.Bitmap
+import com.memohai.autofish.core.ToolException
 import com.memohai.autofish.data.model.ScreenshotData
-import com.memohai.autofish.mcp.McpToolException
 import com.memohai.autofish.services.accessibility.AccessibilityServiceProvider
 import com.memohai.autofish.services.accessibility.AutoFishAccessibilityService
 import javax.inject.Inject
@@ -20,13 +20,13 @@ class ScreenCaptureProviderImpl
             maxHeight: Int?,
         ): Result<ScreenshotData> {
             if (!accessibilityServiceProvider.isReady()) {
-                return Result.failure(McpToolException.PermissionDenied("Accessibility service not enabled"))
+                return Result.failure(ToolException.PermissionDenied("Accessibility service not enabled"))
             }
             val service = accessibilityServiceProvider.getContext() as? AutoFishAccessibilityService
-                ?: return Result.failure(McpToolException.PermissionDenied("Accessibility service not available"))
+                ?: return Result.failure(ToolException.PermissionDenied("Accessibility service not available"))
 
             val bitmap = service.takeScreenshotBitmap()
-                ?: return Result.failure(McpToolException.ActionFailed("Screenshot capture failed"))
+                ?: return Result.failure(ToolException.ActionFailed("Screenshot capture failed"))
 
             var resizedBitmap: Bitmap? = null
             return try {

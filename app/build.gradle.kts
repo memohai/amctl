@@ -143,8 +143,6 @@ dependencies {
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 
-    // MCP SDK
-    implementation(libs.mcp.kotlin.sdk.server)
     runtimeOnly(libs.slf4j.android)
 
     // Kotlinx
@@ -171,7 +169,6 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.server.test.host)
-    testImplementation(libs.mcp.kotlin.sdk.client)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.sse)
 }

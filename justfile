@@ -1,4 +1,4 @@
-# Auto Fish — Android Mobile Control via MCP
+# Autofish — Android Mobile Control via Control
 
 set dotenv-load := true
 
@@ -209,24 +209,6 @@ check:
     fi
     echo ""
     echo "Done."
-
-# ─── MCP Testing (see scripts/ for individual scripts) ───────────────────────
-
-# MCP health check
-mcp-health:
-    ./scripts/01-health.sh
-
-# MCP init session
-mcp-init:
-    ./scripts/02-init.sh
-
-# MCP list tools
-mcp-tools:
-    ./scripts/03-list-tools.sh
-
-# MCP call tool: just mcp-call autofish_tap '{"x":540,"y":1200}'
-mcp-call tool args='{}':
-    ./scripts/04-call-tool.sh {{ tool }} '{{ args }}'
 
 # ─── All-in-One ──────────────────────────────────────────────────────────────
 

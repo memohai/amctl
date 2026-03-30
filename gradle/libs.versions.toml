@@ -16,8 +16,6 @@ datastore = "1.2.0"
 # Networking
 ktor = "3.4.0"
 
-# MCP SDK
-mcp-kotlin-sdk = "0.8.3"
 
 # SLF4J
 slf4j-android = "1.7.36"
@@ -78,14 +76,10 @@ ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serializatio
 # Ktor Test
 ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
 
-# MCP SDK
-mcp-kotlin-sdk-server = { group = "io.modelcontextprotocol", name = "kotlin-sdk-server", version.ref = "mcp-kotlin-sdk" }
-mcp-kotlin-sdk-client = { group = "io.modelcontextprotocol", name = "kotlin-sdk-client", version.ref = "mcp-kotlin-sdk" }
-
 # SLF4J Android binding
 slf4j-android = { group = "org.slf4j", name = "slf4j-android", version.ref = "slf4j-android" }
 
-# Ktor Client (for MCP SDK client in tests)
+# Ktor Client (for Control SDK client in tests)
 ktor-client-cio = { group = "io.ktor", name = "ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-sse = { group = "io.ktor", name = "ktor-sse", version.ref = "ktor" }
