@@ -200,11 +200,10 @@ impl<'a> ApiClient<'a> {
         by: &str,
         value: &str,
         exact_match: bool,
-        expected_ref_version: Option<u64>,
     ) -> ApiResult<ActionResponse> {
         let message = self.authed_post_envelope(
             "/api/nodes/tap",
-            Some(json!({"by": by, "value": value, "exact_match": exact_match, "expected_ref_version": expected_ref_version})),
+            Some(json!({"by": by, "value": value, "exact_match": exact_match})),
         )?;
         Ok(ActionResponse { message })
     }

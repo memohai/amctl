@@ -97,7 +97,7 @@ pub enum ActCommands {
     #[command(
         name = "tap",
         about = "Tap by coordinates or semantic selector",
-        long_about = "Tap by coordinates or semantic selector.\n\nCoordinate mode: `--x <X> --y <Y>` (both non-negative).\nSemantic mode: `--by <text|desc|resid|ref> --value <VALUE> [--exact-match]`.\nFor `--by ref`, CLI sends the latest observed `refVersion` automatically and fails on version mismatch."
+        long_about = "Tap by coordinates or semantic selector.\n\nCoordinate mode: `--x <X> --y <Y>` (both non-negative).\nSemantic mode: `--by <text|desc|resid|ref> --value <VALUE> [--exact-match]`.\nFor `--by ref`, `--value` must be a ref alias from `observe refs` (for example: `@n1`)."
     )]
     #[command(group(
         ArgGroup::new("tap_mode")
@@ -239,8 +239,8 @@ pub enum ObserveCommands {
     Top,
     #[command(
         name = "refs",
-        about = "Observe server-generated clickable refs with version",
-        long_about = "Observe server-generated clickable refs with `refVersion`.\nThis is the source of truth for `act tap --by ref`."
+        about = "Observe server-generated clickable refs with aliases",
+        long_about = "Observe server-generated clickable refs with aliases (`@n1`, `@n2`, ...).\nUse returned ref alias as `act tap --by ref --value <ref>`."
     )]
     Refs {
         #[arg(long = "max-rows", default_value_t = 120)]

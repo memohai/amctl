@@ -134,8 +134,6 @@ fn run_command(
                     by.as_ref().map(|s| s.as_str()),
                     value.as_ref().map(|s| s.as_str()),
                     *exact_match,
-                    trace_store,
-                    ref_scope,
                 ),
             ),
             ActCommands::Swipe { coords, duration } => into_output(
@@ -399,8 +397,6 @@ fn handle_act_tap(
     by: Option<&str>,
     value: Option<&str>,
     exact_match: bool,
-    trace_store: Option<&TraceStore>,
-    ref_scope: &str,
 ) -> CommandResult {
     match (x, y, by, value) {
         (Some(xv), Some(yv), None, None) => {
@@ -412,31 +408,11 @@ fn handle_act_tap(
                 return Err(CommandError::invalid_params("value must not be empty"));
             }
             let by_api = normalize_semantic_tap_by(by_raw)?;
-            let expected_ref_version = if by_api == "ref" {
-                let store = trace_store.ok_or_else(|| {
-                    CommandError::invalid_params(
-                        "tap --by ref requires trace db; remove --no-trace or configure --trace-db/AF_DB",
-                    )
-                })?;
-                store
-                    .get_ref_version(ref_scope)
-                    .map_err(|e| {
-                        CommandError::invalid_params(format!("failed to load local refVersion: {e}"))
-                    })?
-                    .ok_or_else(|| {
-                        CommandError::invalid_params(
-                            "missing local refVersion, run `af observe refs` first",
-                        )
-                    })
-                    .map(Some)?
-            } else {
-                None
-            };
             let msg = api
-                .tap_node(&by_api, value_raw, exact_match, expected_ref_version)
+                .tap_node(&by_api, value_raw, exact_match)
                 .map_err(CommandError::from)?;
             Ok(
-                json!({"mode": "semantic", "by": by_raw, "byNormalized": by_api, "value": value_raw, "exactMatch": exact_match, "expectedRefVersion": expected_ref_version, "result": msg.message}),
+                json!({"mode": "semantic", "by": by_raw, "byNormalized": by_api, "value": value_raw, "exactMatch": exact_match, "result": msg.message}),
             )
         }
         _ => Err(CommandError::invalid_params(
@@ -610,15 +586,10 @@ fn handle_observe_top(api: &ApiClient<'_>) -> CommandResult {
 fn handle_observe_refs(
     api: &ApiClient<'_>,
     max_rows: usize,
-    trace_store: Option<&TraceStore>,
-    ref_scope: &str,
+    _trace_store: Option<&TraceStore>,
+    _ref_scope: &str,
 ) -> CommandResult {
     let refs = api.screen_refs().map_err(CommandError::from)?;
-    if let Some(store) = trace_store {
-        if let Err(e) = store.upsert_ref_version(ref_scope, refs.ref_version) {
-            eprintln!("warn: failed to persist refVersion: {e}");
-        }
-    }
     let rows = refs
         .rows
         .into_iter()

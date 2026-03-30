@@ -27,4 +27,6 @@ class AccessibilityServiceProviderImpl
         override fun isReady(): Boolean = AutoFishAccessibilityService.instance != null
 
         override fun getContext(): Context? = AutoFishAccessibilityService.instance
+
+        override fun getUiChangeSeq(): Long = AutoFishAccessibilityService.uiChangeSeq
     }

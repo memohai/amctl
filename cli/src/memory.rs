@@ -23,7 +23,6 @@ impl TraceStore {
         let connection = Connection::open(&path)
             .with_context(|| format!("failed to connect to sqlite database at {:?}", path))?;
         init_trace_table(&connection)?;
-        init_ref_version_table(&connection)?;
         Ok(Self { connection })
     }
 
@@ -47,32 +46,6 @@ impl TraceStore {
         Ok(())
     }
 
-    pub fn upsert_ref_version(&self, scope: &str, version: u64) -> anyhow::Result<()> {
-        self.connection
-            .execute(
-                "INSERT INTO ref_versions (scope, version, updated_at) VALUES (?1, ?2, datetime('now'))
-                 ON CONFLICT(scope) DO UPDATE SET version = excluded.version, updated_at = excluded.updated_at",
-                params![scope, version as i64],
-            )
-            .with_context(|| "failed to upsert ref version")?;
-        Ok(())
-    }
-
-    pub fn get_ref_version(&self, scope: &str) -> anyhow::Result<Option<u64>> {
-        let mut stmt = self
-            .connection
-            .prepare("SELECT version FROM ref_versions WHERE scope = ?1 LIMIT 1")
-            .with_context(|| "failed to prepare ref_version lookup")?;
-        let mut rows = stmt
-            .query(params![scope])
-            .with_context(|| "failed to query ref_version")?;
-        if let Some(row) = rows.next().with_context(|| "failed to read ref_version row")? {
-            let value: i64 = row.get(0).with_context(|| "failed to decode ref_version")?;
-            Ok(Some(value.max(0) as u64))
-        } else {
-            Ok(None)
-        }
-    }
 }
 
 fn init_trace_table(connection: &Connection) -> anyhow::Result<()> {
@@ -91,20 +64,5 @@ fn init_trace_table(connection: &Connection) -> anyhow::Result<()> {
             [],
         )
         .with_context(|| "failed to create traces table")?;
-    Ok(())
-}
-
-fn init_ref_version_table(connection: &Connection) -> anyhow::Result<()> {
-    connection
-        .execute(
-            "CREATE TABLE IF NOT EXISTS ref_versions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scope TEXT NOT NULL UNIQUE,
-                version INTEGER NOT NULL,
-                updated_at TEXT NOT NULL
-            )",
-            [],
-        )
-        .with_context(|| "failed to create ref_versions table")?;
     Ok(())
 }

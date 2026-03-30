@@ -12,4 +12,5 @@ interface AccessibilityServiceProvider {
     fun getScreenInfo(): ScreenInfo
     fun isReady(): Boolean
     fun getContext(): Context?
+    fun getUiChangeSeq(): Long
 }
