@@ -49,6 +49,39 @@ internal fun shouldRebuildRefs(
     return nowMs - lastComputedAtMs >= forceIntervalMs
 }
 
+internal data class RefAliasToken(
+    val exactToken: String,
+    val identityToken: String,
+)
+
+internal fun buildObservedRefTokenMap(
+    refs: List<ServiceServer.RefNode>,
+    exactTokenBuilder: (ServiceServer.RefNode) -> String,
+    identityTokenBuilder: (ServiceServer.RefNode) -> String,
+): Map<String, RefAliasToken> = refs.associate {
+    it.ref to RefAliasToken(
+        exactToken = exactTokenBuilder(it),
+        identityToken = identityTokenBuilder(it),
+    )
+}
+
+internal fun resolveRecordedTokenForRef(
+    refAlias: String,
+    observedMap: Map<String, RefAliasToken>,
+): RefAliasToken? = observedMap[refAlias]
+
+internal fun findRefNodeByToken(
+    refs: List<ServiceServer.RefNode>,
+    token: RefAliasToken,
+    exactTokenBuilder: (ServiceServer.RefNode) -> String,
+    identityTokenBuilder: (ServiceServer.RefNode) -> String,
+): ServiceServer.RefNode? {
+    val exactMatch = refs.firstOrNull { exactTokenBuilder(it) == token.exactToken }
+    if (exactMatch != null) return exactMatch
+    val identityMatches = refs.filter { identityTokenBuilder(it) == token.identityToken }
+    return identityMatches.singleOrNull()
+}
+
 class ServiceServer(
     private val port: Int,
     private val bindAddress: String,
@@ -71,6 +104,8 @@ class ServiceServer(
     private var refConfig = RefConfig()
     @Volatile
     private var refState = RefState.empty()
+    @Volatile
+    private var lastObservedRefTokenMap: Map<String, RefAliasToken> = emptyMap()
     @Volatile
     private var lastRefUiChangeSeq: Long = -1L
     @Volatile
@@ -187,22 +222,9 @@ class ServiceServer(
         }
 
         get("/screen/refs") {
-            val knownRefVersionRaw = call.request.queryParameters["known_ref_version"]
-            val knownRefVersion = if (knownRefVersionRaw == null) {
-                null
-            } else {
-                knownRefVersionRaw.toLongOrNull()?.takeIf { it >= 0L }
-                    ?: run {
-                        call.respondText(
-                            err("Invalid known_ref_version: $knownRefVersionRaw"),
-                            ContentType.Application.Json,
-                            HttpStatusCode.BadRequest,
-                        )
-                        return@get
-                    }
-            }
             val refsResult = resolveRefsState()
             val state = refsResult.state
+            lastObservedRefTokenMap = buildObservedRefTokenMap(state.refs, ::buildRefToken, ::buildRefIdentityToken)
             val rows = state.refs.take(refConfig.maxRefs.coerceAtLeast(1)).map {
                 RefRowPayload(
                     ref = it.ref,
@@ -224,7 +246,6 @@ class ServiceServer(
                 mode = refsResult.mode,
                 hasWebView = hasWebView,
                 nodeReliability = nodeReliability,
-                unchanged = knownRefVersion != null && knownRefVersion == state.version,
                 rows = rows,
             )
             call.respondText(ok(json.encodeToString(payload)), ContentType.Application.Json)
@@ -391,7 +412,6 @@ class ServiceServer(
         val by: String,
         val value: String,
         val exact_match: Boolean = false,
-        val expected_ref_version: Long? = null,
     )
 
     private fun io.ktor.server.routing.Route.nodeRoutes() {
@@ -455,24 +475,6 @@ class ServiceServer(
                 }
             val byNormalized = findByName(by)
             if (by == SemanticTapBy.REF) {
-                val expected = req.expected_ref_version
-                    ?: run {
-                        call.respondText(
-                            err("expected_ref_version is required when by=ref"),
-                            ContentType.Application.Json,
-                            HttpStatusCode.BadRequest,
-                        )
-                        return@post
-                    }
-                val state = resolveRefsState().state
-                if (state.version != expected) {
-                    call.respondText(
-                        err("VERSION_MISMATCH: expected_ref_version=$expected current_ref_version=${state.version}"),
-                        ContentType.Application.Json,
-                        HttpStatusCode.Conflict,
-                    )
-                    return@post
-                }
                 val refValue = req.value.trim()
                 if (!refValue.matches(Regex("@n\\d+"))) {
                     call.respondText(
@@ -482,12 +484,22 @@ class ServiceServer(
                     )
                     return@post
                 }
-                val refNode = state.refs.firstOrNull { it.ref == refValue }
+                val token = resolveRecordedTokenForRef(refValue, lastObservedRefTokenMap)
                     ?: run {
                         call.respondText(
-                            err("REF_NOT_FOUND: ref=$refValue"),
+                            err("REF_ALIAS_UNOBSERVED: ref=$refValue"),
                             ContentType.Application.Json,
-                            HttpStatusCode.NotFound,
+                            HttpStatusCode.Conflict,
+                        )
+                        return@post
+                    }
+                val state = resolveRefsState().state
+                val refNode = findRefNodeByToken(state.refs, token, ::buildRefToken, ::buildRefIdentityToken)
+                    ?: run {
+                        call.respondText(
+                            err("REF_ALIAS_STALE: ref=$refValue"),
+                            ContentType.Application.Json,
+                            HttpStatusCode.Conflict,
                         )
                         return@post
                     }
@@ -1026,6 +1038,44 @@ class ServiceServer(
             ).joinToString("#")
         }
 
+    private fun buildRefToken(node: RefNode): String {
+        val coarseLeft = (node.bounds.left / 8) * 8
+        val coarseTop = (node.bounds.top / 8) * 8
+        val coarseRight = (node.bounds.right / 8) * 8
+        val coarseBottom = (node.bounds.bottom / 8) * 8
+        val raw = listOf(
+            node.resId ?: "",
+            node.className ?: "",
+            node.text ?: "",
+            node.desc ?: "",
+            "$coarseLeft,$coarseTop,$coarseRight,$coarseBottom",
+            node.windowLayer.toString(),
+            if (node.focused) "1" else "0",
+        ).joinToString("|")
+        return "rt_${raw.hashCode().toUInt().toString(16)}"
+    }
+
+    private fun buildRefIdentityToken(node: RefNode): String {
+        val width = (node.bounds.right - node.bounds.left).coerceAtLeast(0)
+        val height = (node.bounds.bottom - node.bounds.top).coerceAtLeast(0)
+        val coarseWidth = (width / 8) * 8
+        val coarseHeight = (height / 8) * 8
+        val raw = listOf(
+            node.resId ?: "",
+            node.className ?: "",
+            node.text ?: "",
+            node.desc ?: "",
+            "$coarseWidth,$coarseHeight",
+            if (node.clickable) "1" else "0",
+            if (node.longClickable) "1" else "0",
+            if (node.editable) "1" else "0",
+            if (node.scrollable) "1" else "0",
+            node.windowLayer.toString(),
+            if (node.focused) "1" else "0",
+        ).joinToString("|")
+        return "ri_${raw.hashCode().toUInt().toString(16)}"
+    }
+
     private fun buildRefFlags(node: RefNode): String = buildString {
         append(if (node.visible) "on" else "off")
         if (node.clickable) append(",clk")
@@ -1081,7 +1131,6 @@ class ServiceServer(
         val mode: ToolRouter.Mode,
         val hasWebView: Boolean,
         val nodeReliability: String,
-        val unchanged: Boolean = false,
         val rows: List<RefRowPayload>,
     )
 

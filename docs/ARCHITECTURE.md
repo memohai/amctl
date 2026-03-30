@@ -10,7 +10,7 @@ RestServerService (foreground service)
      - /api/tap (coordinate tap)
      - /api/nodes/tap (semantic node tap by text/desc/resource id)
      - /api/screen/refs (clickable refs + refVersion)
-     - /api/nodes/tap by=ref (strict expected_ref_version check)
+     - /api/nodes/tap by=ref (server-side ref alias mapping: exact token first, identity token fallback only when unique)
   -> ToolRouter
       -> v2: system/shizuku/shell
       -> v1: accessibility (fallback)
