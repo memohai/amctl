@@ -13,6 +13,20 @@ Use deterministic control with evidence at every step.
 - You need explicit verification after each action.
 - You need overlay/screenshot diagnostics for ambiguous UI states.
 
+## Install
+
+Install `af` CLI:
+
+```bash
+npm i -g @memohjs/af
+```
+
+Verify installation:
+
+```bash
+af --help
+```
+
 ## Environment
 
 ```bash
