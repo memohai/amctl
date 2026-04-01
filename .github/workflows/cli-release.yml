@@ -116,9 +116,116 @@ jobs:
           path: cli/${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.ext }}
           if-no-files-found: error
 
+  smoke-npm:
+    if: startsWith(github.ref, 'refs/tags/')
+    name: smoke-npm-${{ matrix.target }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            platform_package: linux-x64-musl
+            bin_name: af
+            ext: tar.gz
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            platform_package: linux-arm64-musl
+            bin_name: af
+            ext: tar.gz
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            platform_package: darwin-x64
+            bin_name: af
+            ext: tar.gz
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform_package: darwin-arm64
+            bin_name: af
+            ext: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform_package: win32-x64-msvc
+            bin_name: af.exe
+            ext: zip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: cli-${{ matrix.target }}
+          path: artifacts
+
+      - name: Extract binary (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="$(find artifacts -type f -name "${GITHUB_REF_NAME}-${{ matrix.target }}.${{ matrix.ext }}" | head -n1)"
+          if [[ -z "$ARCHIVE" ]]; then
+            echo "Artifact for target '${{ matrix.target }}' not found"
+            exit 1
+          fi
+          TMPDIR="$(mktemp -d)"
+          tar -xzf "$ARCHIVE" -C "$TMPDIR"
+          BINARY_PATH="$TMPDIR/${{ matrix.bin_name }}"
+          WORKROOT="$RUNNER_TEMP/af-npm-smoke"
+          VERSION="${GITHUB_REF_NAME#cli-v}"
+          node cli/npm/scripts/prepare-smoke-workroot.mjs \
+            --workroot "$WORKROOT" \
+            --version "$VERSION" \
+            --platform-package "${{ matrix.platform_package }}" \
+            --binary "$BINARY_PATH"
+          PLATFORM_TARBALL="$(cd "$WORKROOT/platforms/${{ matrix.platform_package }}" && npm pack | tail -n1)"
+          cp "$WORKROOT/platforms/${{ matrix.platform_package }}/$PLATFORM_TARBALL" "$WORKROOT/meta/vendor/$PLATFORM_TARBALL"
+          META_TARBALL="$(cd "$WORKROOT/meta" && npm pack | tail -n1)"
+          npm install -g "$WORKROOT/meta/$META_TARBALL"
+          PREFIX="$(npm prefix -g)"
+          "$PREFIX/bin/af" --help > /dev/null
+
+      - name: Extract binary (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem -Path artifacts -Recurse -Filter "${env:GITHUB_REF_NAME}-${{ matrix.target }}.${{ matrix.ext }}" | Select-Object -First 1
+          if (-not $archive) { throw "Artifact for target '${{ matrix.target }}' not found" }
+          $tmpdir = Join-Path $env:RUNNER_TEMP "af-smoke-artifact"
+          if (Test-Path $tmpdir) { Remove-Item -Recurse -Force $tmpdir }
+          New-Item -ItemType Directory -Path $tmpdir | Out-Null
+          Expand-Archive -Path $archive.FullName -DestinationPath $tmpdir -Force
+          $binary = Join-Path $tmpdir "${{ matrix.bin_name }}"
+          $workroot = Join-Path $env:RUNNER_TEMP "af-npm-smoke"
+          $version = $env:GITHUB_REF_NAME.Substring(5)
+          node cli/npm/scripts/prepare-smoke-workroot.mjs `
+            --workroot $workroot `
+            --version $version `
+            --platform-package "${{ matrix.platform_package }}" `
+            --binary $binary
+          $platformDir = Join-Path $workroot "platforms/${{ matrix.platform_package }}"
+          Push-Location $platformDir
+          $platformTarball = (npm pack | Select-Object -Last 1).Trim()
+          Pop-Location
+          Copy-Item (Join-Path $platformDir $platformTarball) (Join-Path $workroot "meta/vendor/$platformTarball")
+          $metaDir = Join-Path $workroot "meta"
+          Push-Location $metaDir
+          $metaTarball = (npm pack | Select-Object -Last 1).Trim()
+          Pop-Location
+          npm install -g (Join-Path $metaDir $metaTarball)
+          $prefix = npm prefix -g
+          & (Join-Path $prefix "af.cmd") --help | Out-Null
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, smoke-npm]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -134,7 +241,7 @@ jobs:
 
   npm-publish:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build, release]
+    needs: [build, smoke-npm, release]
     runs-on: ubuntu-latest
     permissions:
       contents: read
