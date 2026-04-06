@@ -38,9 +38,9 @@ Run first commands:
 
 ```bash
 af health
-af observe top
-af observe screen --max-rows 80 --field id --field text --field desc --field resId --field flags
-af observe refs --max-rows 80
+af observe page --field screen --field refs --max-rows 80
+af memory search --app com.android.settings
+af memory context
 af act tap --by ref --value @n1
 af act tap --by text --value "Settings"
 af act tap --xy 540,1200
@@ -66,4 +66,5 @@ just install
 More docs:
 
 - [CLI details](./cli/README.md)
+- [Memory notes](./docs/CLI_MEMORY.md)
 - [Design docs](./docs/)
