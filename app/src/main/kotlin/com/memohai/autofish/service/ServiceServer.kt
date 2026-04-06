@@ -56,6 +56,8 @@ internal fun stableObservedTopActivity(before: String?, after: String?): String?
     return before.takeIf { it == after }
 }
 
+internal fun clampObserveMaxRows(maxRows: Int): Int = maxRows.coerceAtLeast(0)
+
 internal data class RefAliasToken(
     val exactToken: String,
     val identityToken: String,
@@ -223,7 +225,7 @@ class ServiceServer(
         get("/observe") {
             val include = (call.request.queryParameters["include"] ?: "top,screen")
                 .split(",").map { it.trim().lowercase() }.toSet()
-            val maxRows = call.request.queryParameters["max_rows"]?.toIntOrNull() ?: 120
+            val maxRows = clampObserveMaxRows(call.request.queryParameters["max_rows"]?.toIntOrNull() ?: 120)
 
             val topActivityBefore = readTopActivityOrNull()
             val snapshot = collectScreenSnapshot()
@@ -255,7 +257,7 @@ class ServiceServer(
             if ("refs" in include) {
                 val state = refreshRefState(snapshot)
                 lastObservedRefTokenMap = buildObservedRefTokenMap(state.refs, ::buildRefToken, ::buildRefIdentityToken)
-                val refRows = state.refs.take(maxRows.coerceAtLeast(0)).map {
+                val refRows = state.refs.take(maxRows).map {
                     RefRowPayload(
                         ref = it.ref,
                         node_id = it.nodeId,
@@ -287,9 +289,11 @@ class ServiceServer(
         }
 
         get("/screen") {
+            val topActivityBefore = readTopActivityOrNull()
             val snapshot = collectScreenSnapshot()
             val result = MultiWindowResult(windows = snapshot.windows, degraded = snapshot.degraded)
-            val topActivity = readTopActivityOrNull()
+            val topActivityAfter = readTopActivityOrNull()
+            val topActivity = stableObservedTopActivity(topActivityBefore, topActivityAfter)
             val modeHeader = "[mode: ${snapshot.mode}]"
             val topHeader = "[topActivity: ${topActivity ?: ""}]"
             val tsv = "$modeHeader\n$topHeader\n${compactTreeFormatter.formatMultiWindow(result, snapshot.screenInfo)}"
@@ -297,6 +301,7 @@ class ServiceServer(
         }
 
         get("/screen/refs") {
+            val topActivityBefore = readTopActivityOrNull()
             val refsResult = resolveRefsState()
             val state = refsResult.state
             lastObservedRefTokenMap = buildObservedRefTokenMap(state.refs, ::buildRefToken, ::buildRefIdentityToken)
@@ -314,7 +319,8 @@ class ServiceServer(
             }
             val hasWebView = rows.any { (it.class_name ?: "").contains("WebView", ignoreCase = true) }
             val nodeReliability = if (hasWebView || rows.isEmpty()) "low" else "high"
-            val topActivity = readTopActivityOrNull()
+            val topActivityAfter = readTopActivityOrNull()
+            val topActivity = stableObservedTopActivity(topActivityBefore, topActivityAfter)
             val payload = RefScreenPayload(
                 refVersion = state.version,
                 refCount = state.refs.size,

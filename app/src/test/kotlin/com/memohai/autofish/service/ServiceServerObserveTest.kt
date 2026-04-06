@@ -23,4 +23,11 @@ class ServiceServerObserveTest {
         assertNull(stableObservedTopActivity(null, "com.a/.Main"))
         assertNull(stableObservedTopActivity("com.a/.Main", null))
     }
+
+    @Test
+    fun `clampObserveMaxRows never returns negative values`() {
+        assertEquals(0, clampObserveMaxRows(-1))
+        assertEquals(0, clampObserveMaxRows(0))
+        assertEquals(10, clampObserveMaxRows(10))
+    }
 }

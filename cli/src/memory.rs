@@ -482,8 +482,12 @@ impl MemoryStore {
     /// recovery records instead.
     /// Find the most recent unconsumed act event before `before_id`.
     ///
-    /// An act is "consumed" if a verify or recover event exists between it and
-    /// `before_id`, meaning a previous verify/recover already closed it.
+    /// An act is "consumed" when either:
+    /// - an intervening recover exists between it and `before_id`, or
+    /// - an intervening verify actually closed a transition for that act.
+    ///
+    /// A stale verify that did not close a transition must not consume the act,
+    /// otherwise a later fresh observe + verify would never be able to close it.
     pub fn previous_action_event(
         &self,
         session: &str,
@@ -500,7 +504,17 @@ impl MemoryStore {
                        SELECT 1 FROM events e2
                        WHERE e2.session = ?1
                          AND e2.id > events.id AND e2.id < ?2
-                         AND e2.category IN ('verify', 'recover')
+                         AND (
+                             e2.category = 'recover'
+                             OR (
+                                 e2.category = 'verify'
+                                 AND EXISTS (
+                                     SELECT 1 FROM transitions t
+                                     WHERE t.last_action_event_id = events.id
+                                       AND t.last_verify_event_id = e2.id
+                                 )
+                             )
+                         )
                    )
                  ORDER BY id DESC LIMIT 1",
                 params![session, before_id],
@@ -1382,15 +1396,38 @@ mod tests {
     fn previous_action_event_consumed_by_verify() {
         let store = MemoryStore::new_in_memory().expect("init");
 
-        let _ = store
+        let act_id = store
             .record_event(&test_event("act", "ok", None))
             .expect("act");
-        let _ = store
+        let verify1_id = store
             .record_event(&test_event("verify", "ok", None))
             .expect("verify1");
         let verify2_id = store
             .record_event(&test_event("verify", "ok", None))
             .expect("verify2");
+
+        let pre = PageContext {
+            app: "com.a".into(),
+            activity: "com.a/.Main".into(),
+            page_fingerprint: "".into(),
+            fingerprint_source: String::new(),
+            mode: String::new(),
+            has_webview: false,
+            node_reliability: String::new(),
+            ref_version: None,
+            observed_at: String::new(),
+        };
+        let action = store
+            .get_event_by_id(act_id)
+            .expect("get act")
+            .expect("act exists");
+        let verify1 = store
+            .get_event_by_id(verify1_id)
+            .expect("get verify1")
+            .expect("verify1 exists");
+        store
+            .upsert_transition(&pre, &action, &pre, &verify1, true)
+            .expect("close transition");
 
         let found = store
             .previous_action_event("s1", verify2_id)
@@ -1416,6 +1453,27 @@ mod tests {
             .previous_action_event("s1", verify_id)
             .expect("query")
             .expect("should find unconsumed act");
+        assert_eq!(found.id, act_id);
+    }
+
+    #[test]
+    fn previous_action_event_not_consumed_by_unclosed_verify() {
+        let store = MemoryStore::new_in_memory().expect("init");
+
+        let act_id = store
+            .record_event(&test_event("act", "ok", None))
+            .expect("act");
+        let _ = store
+            .record_event(&test_event("verify", "ok", None))
+            .expect("stale verify");
+        let verify2_id = store
+            .record_event(&test_event("verify", "ok", None))
+            .expect("fresh verify");
+
+        let found = store
+            .previous_action_event("s1", verify2_id)
+            .expect("query")
+            .expect("act should remain available");
         assert_eq!(found.id, act_id);
     }
 
