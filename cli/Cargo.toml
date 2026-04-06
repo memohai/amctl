@@ -1,7 +1,7 @@
 [package]
 name = "auto-fish-cli"
 authors = ["MemohAI"]
-version = "0.2.1"
+version = "0.3.0-rc.1"
 edition = "2024"
 description = "Deterministic CLI executor for the Autofish Android device control service"
 license = "Apache-2.0"

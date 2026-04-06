@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.3.0-rc.1] - 2026-04-06
+
+Range: `app-v0.2.1` (`9374656`) .. `app-v0.3.0-rc.1`
 
 ### Added
 - Add agent-driven knowledge notes (append-only): `af memory save`, `af memory search`, `af memory delete --id`.
