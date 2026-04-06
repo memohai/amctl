@@ -3,14 +3,16 @@ mod builder;
 mod cli;
 mod commands;
 mod core;
+mod db;
 mod memory;
+mod memory_recording;
 mod output;
 mod runner;
 
 use crate::builder::ReqClientBuilder;
 use crate::cli::Cli;
-use crate::memory::{TraceRecord, TraceStore};
-use crate::runner::run_command;
+use crate::memory::MemoryStore;
+use crate::runner::{persist_memory, run_command};
 use clap::Parser;
 use crossbeam_channel::{Receiver, bounded, select};
 use std::process;
@@ -19,10 +21,10 @@ use std::time::Instant;
 fn main() -> anyhow::Result<()> {
     let ctrl_c_events = ctrl_channel()?;
     let cli = Cli::parse();
-    let trace_store = if cli.no_trace {
+    let memory_store = if cli.no_memory {
         None
     } else {
-        Some(TraceStore::new(cli.trace_db.clone())?)
+        Some(MemoryStore::new(cli.memory_db.clone())?)
     };
 
     let runtime = ReqClientBuilder::new(
@@ -34,11 +36,17 @@ fn main() -> anyhow::Result<()> {
 
     let client = runtime.build()?;
     let started = Instant::now();
-    let result = run_command(&client, &runtime, &ctrl_c_events, &cli.command);
-    persist_trace(
-        &trace_store,
+    let result = run_command(
+        &client,
+        &runtime,
+        &ctrl_c_events,
         &cli,
-        &runtime.session_id,
+        memory_store.as_ref(),
+    );
+    persist_memory(
+        &memory_store,
+        &cli,
+        &runtime.invocation_id,
         &result,
         started.elapsed().as_millis(),
     );
@@ -53,41 +61,6 @@ fn main() -> anyhow::Result<()> {
         process::exit(exit_code);
     }
     Ok(())
-}
-
-fn persist_trace(
-    trace_store: &Option<TraceStore>,
-    cli: &Cli,
-    trace_id: &str,
-    result: &serde_json::Value,
-    duration_ms: u128,
-) {
-    let Some(store) = trace_store else {
-        return;
-    };
-
-    let status = result
-        .get("status")
-        .and_then(|value| value.as_str())
-        .unwrap_or("unknown")
-        .to_string();
-    let output_json = match serde_json::to_string(result) {
-        Ok(value) => value,
-        Err(error) => format!(r#"{{"traceSerializeError":"{error}"}}"#),
-    };
-    let command = format!("{:?}", cli.command);
-    let record = TraceRecord {
-        created_at: chrono::Utc::now().to_rfc3339(),
-        session: cli.session.clone(),
-        trace_id: trace_id.to_string(),
-        command,
-        status,
-        output_json,
-        duration_ms,
-    };
-    if let Err(error) = store.record(&record) {
-        eprintln!("warn: failed to persist trace: {error}");
-    }
 }
 
 pub(crate) fn run_with_interrupt<T, F>(ctrl_c_events: &Receiver<()>, work: F) -> anyhow::Result<T>

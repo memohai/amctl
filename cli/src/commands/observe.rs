@@ -1,8 +1,8 @@
 use crate::api::request::{ApiClient, OverlaySetRequest};
-use crate::cli::{MarkScope, ScreenFieldArg};
+use crate::cli::{MarkScope, PageSliceArg, ScreenFieldArg};
 use crate::commands::common::{OverlaySetOptions, compact_row_json, parse_screen_fields};
 use crate::output::{CommandError, CommandResult};
-use serde_json::json;
+use serde_json::{Value, json};
 
 pub fn handle_screen(
     api: &ApiClient<'_>,
@@ -22,7 +22,8 @@ pub fn handle_screen(
             "raw": screen.raw,
             "full": true,
             "hasWebView": screen.has_webview,
-            "nodeReliability": screen.node_reliability
+            "nodeReliability": screen.node_reliability,
+            "topActivity": screen.top_activity
         }));
     }
 
@@ -41,7 +42,8 @@ pub fn handle_screen(
         "full": false,
         "fields": selected_fields,
         "hasWebView": screen.has_webview,
-        "nodeReliability": screen.node_reliability
+        "nodeReliability": screen.node_reliability,
+        "topActivity": screen.top_activity
     }))
 }
 
@@ -135,6 +137,73 @@ pub fn handle_refs(api: &ApiClient<'_>, max_rows: usize) -> CommandResult {
         "hasWebView": refs.has_webview,
         "nodeReliability": refs.node_reliability,
         "returnedRows": rows.len(),
-        "rows": rows
+        "rows": rows,
+        "topActivity": refs.top_activity
     }))
+}
+
+pub fn handle_page(api: &ApiClient<'_>, fields: &[PageSliceArg], max_rows: usize) -> CommandResult {
+    let mut slices: Vec<&str> = vec!["top"];
+    if fields.is_empty() {
+        slices.push("screen");
+    } else {
+        for f in fields {
+            match f {
+                PageSliceArg::Screen => slices.push("screen"),
+                PageSliceArg::Refs => slices.push("refs"),
+            }
+        }
+    }
+    let resp = api
+        .observe(&slices, Some(max_rows))
+        .map_err(CommandError::from)?;
+
+    let mut out = serde_json::Map::new();
+
+    out.insert("topActivity".into(), json!(resp.top_activity));
+    out.insert("mode".into(), json!(resp.mode));
+    out.insert("hasWebView".into(), json!(resp.has_webview));
+    out.insert("nodeReliability".into(), json!(resp.node_reliability));
+
+    if let Some(screen) = &resp.screen {
+        out.insert(
+            "screen".into(),
+            json!({
+                "rowCount": screen.row_count,
+                "returnedRows": screen.rows.len(),
+                "rows": screen.rows,
+            }),
+        );
+    }
+
+    if let Some(refs) = &resp.refs {
+        let ref_rows: Vec<Value> = refs
+            .rows
+            .iter()
+            .map(|row| {
+                json!({
+                    "ref": row.ref_id,
+                    "id": row.node_id,
+                    "class": row.class_name,
+                    "text": row.text,
+                    "desc": row.desc,
+                    "resId": row.res_id,
+                    "bounds": row.bounds,
+                    "flags": row.flags
+                })
+            })
+            .collect();
+        out.insert(
+            "refs".into(),
+            json!({
+                "refVersion": refs.ref_version,
+                "refCount": refs.ref_count,
+                "updatedAtMs": refs.updated_at_ms,
+                "returnedRows": ref_rows.len(),
+                "rows": ref_rows,
+            }),
+        );
+    }
+
+    Ok(Value::Object(out))
 }

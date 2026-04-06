@@ -44,6 +44,12 @@ pub enum ScreenFieldArg {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PageSliceArg {
+    Screen,
+    Refs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum MarkScope {
     All,
     Interactive,
@@ -70,8 +76,8 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = ProxyMode::Auto)]
     pub proxy: ProxyMode,
 
-    #[arg(long = "no-trace", default_value_t = false)]
-    pub no_trace: bool,
+    #[arg(long = "no-memory", alias = "no-trace", default_value_t = false)]
+    pub no_memory: bool,
 
     #[arg(
         long,
@@ -79,9 +85,13 @@ pub struct Cli {
         default_value = "af.db",
         value_hint = clap::ValueHint::FilePath
     )]
-    pub trace_db: PathBuf,
+    pub memory_db: PathBuf,
 
-    #[arg(long, default_value = "default")]
+    #[arg(
+        long,
+        default_value = "default",
+        help = "Logical task session used to group memory across multiple CLI calls."
+    )]
     pub session: String,
 
     #[command(subcommand)]
@@ -106,6 +116,14 @@ pub enum Commands {
     Verify {
         #[command(subcommand)]
         command: VerifyCommands,
+    },
+    #[command(
+        name = "memory",
+        about = "Query or inspect agent-oriented local memory"
+    )]
+    Memory {
+        #[command(subcommand)]
+        command: MemoryCommands,
     },
     #[command(name = "recover", about = "Run simple recovery actions")]
     Recover {
@@ -314,6 +332,22 @@ pub enum ObserveCommands {
         #[arg(long = "max-rows", default_value_t = 120)]
         max_rows: usize,
     },
+    #[command(
+        name = "page",
+        about = "Atomic page observation: top + screen + refs in one call",
+        long_about = "Observe page state atomically. Always returns base metadata; topActivity may be null when a stable value cannot be determined.\nUse --field to select additional data slices (default: screen). All data comes from the same point-in-time capture."
+    )]
+    Page {
+        #[arg(
+            long = "field",
+            value_name = "FIELD",
+            value_enum,
+            help = "Data slice to include. Repeatable: --field screen --field refs. Default: screen."
+        )]
+        fields: Vec<PageSliceArg>,
+        #[arg(long = "max-rows", default_value_t = 120)]
+        max_rows: usize,
+    },
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -392,6 +426,72 @@ pub enum VerifyCommands {
         #[arg(long, default_value_t = false)]
         exact_match: bool,
     },
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum MemoryCommands {
+    #[command(name = "save", about = "Save a knowledge note (append-only)")]
+    Save {
+        #[arg(long, default_value = "")]
+        app: String,
+        #[arg(long)]
+        topic: String,
+        #[arg(long)]
+        content: String,
+    },
+    #[command(
+        name = "search",
+        about = "Search notes by app, topic prefix, or keyword"
+    )]
+    Search {
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        topic: Option<String>,
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    #[command(name = "delete", about = "Delete a note by id")]
+    Delete {
+        #[arg(long)]
+        id: i64,
+    },
+    #[command(name = "log", about = "Query the event log")]
+    Log {
+        #[arg(long)]
+        session: Option<String>,
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    #[command(name = "stats", about = "Show event statistics")]
+    Stats {
+        #[arg(long)]
+        session: Option<String>,
+    },
+    #[command(
+        name = "experience",
+        about = "Query past transitions and recoveries (three-tier: page → activity → app)"
+    )]
+    Experience {
+        #[arg(long, default_value = "")]
+        app: String,
+        #[arg(long, default_value = "")]
+        activity: String,
+        #[arg(long = "page-fp", default_value = "")]
+        page_fingerprint: String,
+        #[arg(long = "failure-cause")]
+        failure_cause: Option<String>,
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
+    #[command(name = "context", about = "Show current session observation cache")]
+    Context,
 }
 
 #[derive(clap::Subcommand, Debug)]
