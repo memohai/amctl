@@ -11,21 +11,6 @@ Use deterministic control with evidence at every step.
 - You need to navigate Android UI through Autofish (`af`).
 - You need stable replay using refs (`@nK`) instead of coordinates.
 - You need explicit verification after each action.
-- You need overlay/screenshot diagnostics for ambiguous UI states.
-
-## Install
-
-Install `af` CLI:
-
-```bash
-npm i -g @memohjs/af
-```
-
-Verify installation:
-
-```bash
-af --help
-```
 
 ## Environment
 
@@ -35,110 +20,88 @@ export AF_TOKEN="<token>"
 export AF_DB="./af.db"
 ```
 
-`AF_URL` is required.  
-`AF_TOKEN` is required for protected calls.
+`af health` only requires `AF_URL`.
+`observe`, `act`, `verify`, `recover` require `AF_URL` + `AF_TOKEN`.
+`af memory ...` is local-only and only needs `AF_DB`.
 
 ## Workflow
 
 1. Baseline:
-- `af health`
-- `af observe top`
-- `af observe screen --max-rows 80 --field id --field text --field desc --field resId --field flags`
-- `af observe refs --max-rows 80`
+- `af observe page --field screen --field refs --max-rows 80`
+- `af memory search --app <current-app>`
+- `af memory experience --app <current-app> --activity <current-activity>`
 
 2. One-step execution:
 - Run exactly one action command.
-- Re-observe state immediately.
+- `af observe page` (add `--field refs` if needed).
 - Verify expected state.
 
-3. Continue only from fresh observations.
+3. Continue only from fresh observations. Do not run blind action chains.
 
-Do not run blind action chains.
+4. After solving a non-trivial problem:
+- `af memory save --app <pkg> --topic "<category>/<name>" --content "<what you learned>"`
 
-## Preferred Tap Order
+### observe page
 
-1. Ref tap: `af act tap --by ref --value @nK`
-2. Semantic tap: `af act tap --by text|desc|resid --value "<value>" [--exact-match]`
-3. Coordinate tap fallback: `af act tap --xy X,Y`
+Always returns: `topActivity`, `mode`, `hasWebView`, `nodeReliability`.
 
-## Refs Handling
+| `--field` | What it adds |
+|---|---|
+| `screen` (default) | Full UI tree rows |
+| `refs` | Clickable ref aliases with `refVersion` |
 
-Refs are aliases from `af observe refs`.
+`topActivity` is `null` when the service cannot confirm a stable value; re-observe if that happens.
 
-- Refresh refs on dynamic pages.
-- If ref tap fails with stale/unobserved errors, re-run `af observe refs` and select again.
+## Tap Priority
+
+1. `af act tap --by ref --value @nK`
+2. `af act tap --by text|desc|resid --value "<value>" [--exact-match]`
+3. `af act tap --xy X,Y`
+
+## Refs
+
+- Refresh refs on dynamic pages: `af observe page --field refs`.
+- If ref tap fails with stale/unobserved errors, re-observe and retry.
 - Do not assume alias index stability after UI updates.
 
-## Overlay
-
-Get state:
-```bash
-af observe overlay get
-```
-
-Enable and configure:
-```bash
-af observe overlay set --enable --mark-scope all --refresh on --refresh-interval-ms 800
-```
-
-Disable:
-```bash
-af observe overlay set --disable --mark-scope all --refresh off
-```
-
-## Screenshot
-
-Basic:
-```bash
-af observe screenshot
-```
-
-Annotated:
-```bash
-af observe screenshot --annotate --max-marks 120 --mark-scope interactive
-```
-
-## Swipe
-
-```bash
-af act swipe --from 100,1200 --to 900,1200 --duration 300
-```
-
-## Verification Priority
+## Verify Priority
 
 1. `af verify top-activity --expected "<activity>" --mode contains`
 2. `af verify text-contains --text "<text>"`
 3. `af verify node-exists --by text|desc|resid|class --value "<value>" [--exact-match]`
 
-If node-based verification is unreliable on WebView-heavy pages, prefer `text-contains` first.
+On WebView-heavy pages (`nodeReliability=low`), prefer `text-contains`.
 
 ## Recovery
 
 When state is uncertain:
-1. `af observe top`
-2. `af observe screen --max-rows 120 --field id --field text --field desc --field resId --field flags`
+1. `af observe page --max-rows 120`
+2. `af memory experience --app <pkg> --activity <act> --failure-cause <cause>`
 3. `af recover back --times 1` (or `2`)
-4. Re-run start checklist
+4. `af memory log --session <current-session> --status failed --limit 5`
+5. Re-run baseline
 
-## Examples
+## Diagnostics
 
-Open a screen item using refs:
 ```bash
-af observe refs --max-rows 80
-af act tap --by ref --value @n3
-af verify text-contains --text "Settings"
-```
-
-Capture annotated evidence:
-```bash
-af observe overlay set --enable --mark-scope all --refresh on
+af observe overlay set --enable --mark-scope all --refresh on --refresh-interval-ms 800
 af observe screenshot --annotate --max-marks 120 --mark-scope interactive
 af observe overlay set --disable --mark-scope all --refresh off
 ```
 
+## Memory Topic Conventions
+
+| Prefix | Purpose |
+|---|---|
+| `nav/` | Navigation paths between screens |
+| `pitfall/` | Known problems and workarounds |
+| `selector/` | Reliable selector strategies |
+| `recovery/` | Recovery strategies that worked |
+
 ## Guidelines
 
-- Favor refs over coordinates whenever possible.
-- Keep each action followed by observation and verification.
-- Prefer deterministic checks (`top-activity`, `text-contains`) before deeper node checks.
-- Treat recover commands as state-changing operations and re-baseline afterward.
+- Favor refs over coordinates.
+- Keep `--session` stable across one task.
+- Each action must be followed by observation and verification.
+- Use `af memory experience` before acting on unfamiliar pages.
+- Use `af memory context` to inspect the current cached page fingerprint.

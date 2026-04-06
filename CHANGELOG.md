@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Add agent-driven knowledge notes (append-only): `af memory save`, `af memory search`, `af memory delete --id`.
+- Add structured event log with failure cause and verify evidence: `af memory log`, `af memory stats`.
+- Add automatic transition tracking: act → verify sequences are closed into transitions with success/verified/failure counters.
+- Add automatic recovery tracking: recover commands are linked to preceding failures with success/failure counters.
+- Add three-tier experience query (page → activity → app): `af memory experience`.
+- Add session observation cache: `af memory context` shows cached page fingerprint.
+- Add stable page fingerprint: human-readable string with activity, mode, webview flag, res_id anchors, class_name fallback. Replaces opaque FNV hash.
+- Session cache updated by `observe top`, `observe screen`, `observe refs`, and `observe page` with quality-based overwrite rules.
+- Add `af observe page`: stability-oriented observation that always returns base context fields (`topActivity`, `mode`, `hasWebView`, `nodeReliability`) in the response shape. `topActivity` may be `null` when the service cannot confirm a stable value during the request. Use `--field screen` and/or `--field refs` to include data slices (default: screen).
+- Add server-side `GET /api/observe?include=top,screen,refs` endpoint for atomic, selective page observation.
+
+### Changed
+- Repurpose `AF_DB` from raw trace history storage to SQLite-backed tool memory storage.
+- Rename CLI opt-out flag to `--no-memory` and keep `--no-trace` as a compatibility alias.
+- Use CLI `--session` as the task grouping key for events and transitions.
+- Memory no longer captures page context via extra HTTP calls; context is derived from commands the agent already runs.
+- Make `af memory ...` a pure local command path. Remote options (`--url`, `--token`, `--timeout-ms`, `--proxy`) now belong to remote command groups instead of the global CLI root.
+- Require `--token` during CLI argument parsing for protected remote command groups (`observe`, `act`, `verify`, `recover`). `health` no longer accepts `--token`.
+- Notes are append-only; multiple notes with same `(app, topic)` coexist as historical chain (no more UPSERT overwrite).
+- Transition closing is deferred: pre-context comes from act's cached state, post-context from the subsequent verify. Never closes at act time.
+
+### Removed
+- Remove `af memory next` (step recommendation engine). Replaced by `af memory experience` with three-tier matching.
+- Remove `af memory inspect`. Replaced by `af memory experience`, `af memory log`, `af memory stats`.
+- Remove `af memory get` (single-note lookup). Use `af memory search --topic <exact>` instead.
+- Remove page-key FNV hash fingerprinting.
+- Remove SQLite migration system (pre-release schema uses `CREATE TABLE IF NOT EXISTS`).
+
+### BREAKING
+- Replace `af memory next --goal ...` with `af memory experience --app ... --activity ...` for execution experience.
+- Replace `af memory inspect` with `af memory experience` / `af memory log` / `af memory stats`.
+- Replace `af memory delete --app ... --topic ...` with `af memory delete --id <note_id>`.
+- Existing `af.db` v1 tables (`memory_steps`, `memory_verifications`, `memory_transitions`, `memory_recoveries`) are incompatible; delete `af.db` to recreate.
+- Migration example: replace `af --no-trace ...` with `af --no-memory ...` in scripts.
+- CLI shape change:
+  - old: `af --url http://host:9998 memory log --session demo`
+  - new: `af memory log --session demo`
+- CLI shape change for explicit remote flags:
+  - old: `af --url http://host:9998 observe page --field refs`
+  - new: `af observe --url http://host:9998 page --field refs`
+- Protected remote commands now require `--token` at parse time:
+  - old: `af verify --url http://host:9998 text-contains --text Settings`
+  - new: `af verify --url http://host:9998 --token <token> text-contains --text Settings`
+- `health` no longer exposes `--token`:
+  - old: `af health --url http://host:9998 --token <token>`
+  - new: `af health --url http://host:9998`
+
 ## [0.2.1] - 2026-04-01
 
 Range: `app-v0.2.0` (`6201e4b`) .. `app-v0.2.1`

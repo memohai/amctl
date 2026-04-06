@@ -87,6 +87,7 @@ pub struct OverlaySetRequest {
 pub struct ScreenResponse {
     pub raw: String,
     pub mode: Option<String>,
+    pub top_activity: Option<String>,
     pub rows: Vec<ScreenRow>,
     pub has_webview: bool,
     pub node_reliability: String,
@@ -105,6 +106,39 @@ pub struct ScreenRefsResponse {
     pub has_webview: bool,
     #[serde(rename = "nodeReliability")]
     pub node_reliability: String,
+    pub rows: Vec<RefRow>,
+    #[serde(rename = "topActivity")]
+    pub top_activity: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObserveResponse {
+    #[serde(rename = "topActivity")]
+    pub top_activity: Option<String>,
+    pub mode: String,
+    #[serde(rename = "hasWebView")]
+    pub has_webview: bool,
+    #[serde(rename = "nodeReliability")]
+    pub node_reliability: String,
+    pub screen: Option<ObserveScreenSlice>,
+    pub refs: Option<ObserveRefsSlice>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObserveScreenSlice {
+    #[serde(rename = "rowCount")]
+    pub row_count: usize,
+    pub rows: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObserveRefsSlice {
+    #[serde(rename = "refVersion")]
+    pub ref_version: u64,
+    #[serde(rename = "refCount")]
+    pub ref_count: usize,
+    #[serde(rename = "updatedAtMs")]
+    pub updated_at_ms: u64,
     pub rows: Vec<RefRow>,
 }
 
@@ -272,6 +306,7 @@ impl<'a> ApiClient<'a> {
         Ok(ScreenResponse {
             raw,
             mode: parsed.mode,
+            top_activity: parsed.top_activity,
             rows: parsed.rows,
             has_webview,
             node_reliability,
@@ -284,6 +319,22 @@ impl<'a> ApiClient<'a> {
             ApiError::new(
                 ApiErrorKind::BadResponse,
                 format!("Unexpected /api/screen/refs payload format ({e})"),
+            )
+            .with_raw(Some(raw))
+        })
+    }
+
+    pub fn observe(&self, include: &[&str], max_rows: Option<usize>) -> ApiResult<ObserveResponse> {
+        let include_param = include.join(",");
+        let mut params: Vec<(&str, String)> = vec![("include", include_param)];
+        if let Some(mr) = max_rows {
+            params.push(("max_rows", mr.to_string()));
+        }
+        let raw = self.authed_get_envelope("/api/observe", Some(&params))?;
+        serde_json::from_str::<ObserveResponse>(&raw).map_err(|e| {
+            ApiError::new(
+                ApiErrorKind::BadResponse,
+                format!("Unexpected /api/observe payload format ({e})"),
             )
             .with_raw(Some(raw))
         })
@@ -544,6 +595,7 @@ struct ParsedNodes {
 #[derive(Default)]
 struct ParsedScreen {
     mode: Option<String>,
+    top_activity: Option<String>,
     rows: Vec<ScreenRow>,
 }
 
@@ -635,6 +687,11 @@ fn parse_screen_tsv(raw: &str) -> ParsedScreen {
             continue;
         }
 
+        if let Some(activity) = parse_top_activity_line(trimmed) {
+            parsed.top_activity = Some(activity);
+            continue;
+        }
+
         if trimmed.starts_with("--- window:") {
             in_node_table = false;
             in_hierarchy = false;
@@ -674,6 +731,20 @@ fn parse_mode_line(line: &str) -> Option<String> {
                 .trim_end_matches(']')
                 .to_string(),
         );
+    }
+    None
+}
+
+fn parse_top_activity_line(line: &str) -> Option<String> {
+    if line.starts_with("[topActivity: ") && line.ends_with(']') {
+        let val = line
+            .trim_start_matches("[topActivity: ")
+            .trim_end_matches(']')
+            .to_string();
+        if val.is_empty() {
+            return None;
+        }
+        return Some(val);
     }
     None
 }

@@ -23,16 +23,14 @@ export AF_TOKEN="<token>"
 export AF_DB="./af.db"
 
 af health
-af observe screen --max-rows 80 --field id --field text --field desc --field resId --field flags
-af observe refs --max-rows 80
-af observe overlay get
-af observe overlay set --enable --mark-scope all --refresh on
-af observe screenshot --annotate --max-marks 120 --mark-scope interactive
+af observe page --field screen --field refs --max-rows 80
 af act tap --by ref --value @n1
-af act tap --by text --value "Settings"
-af act tap --xy 540,1200
-af act swipe --from 100,1200 --to 900,1200 --duration 300
+af verify text-contains --text "Settings"
+af memory search --app com.android.settings
+af memory experience --app com.android.settings --activity com.android.settings/.Settings
 ```
+
+`health` only requires `AF_URL`. `observe`, `act`, `verify`, and `recover` require both `AF_URL` and `AF_TOKEN`. `memory` is local-only and only needs `AF_DB`.
 
 ## Command groups
 
@@ -41,11 +39,15 @@ af act swipe --from 100,1200 --to 900,1200 --duration 300
   - `tap` (preferred: `--by ref --value @nK`; coordinates: `--xy`; semantic: `--by --value [--exact-match]`)
   - `swipe`, `back`, `home`, `text`, `launch`, `stop`, `key`
 - `observe`:
-  - `screen`, `refs`, `overlay`, `screenshot`, `top`
+  - `page` (`--field screen|refs`; base context is always returned), `screen`, `refs`, `overlay`, `screenshot`, `top`
 - `verify`:
   - `text-contains`, `top-activity`, `node-exists`
+- `memory`:
+  - `save`, `search`, `delete`, `experience`, `context`, `log`, `stats`
 - `recover`:
   - `back`, `home`, `relaunch`
+
+See [`docs/CLI_MEMORY.md`](../docs/CLI_MEMORY.md) for memory design details.
 
 ## Output and exit code
 

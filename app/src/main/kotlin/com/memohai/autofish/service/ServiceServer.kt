@@ -49,6 +49,15 @@ internal fun shouldRebuildRefs(
     return nowMs - lastComputedAtMs >= forceIntervalMs
 }
 
+internal fun stableObservedTopActivity(before: String?, after: String?): String? {
+    if (before.isNullOrBlank() || after.isNullOrBlank()) {
+        return null
+    }
+    return before.takeIf { it == after }
+}
+
+internal fun clampObserveMaxRows(maxRows: Int): Int = maxRows.coerceAtLeast(0)
+
 internal data class RefAliasToken(
     val exactToken: String,
     val identityToken: String,
@@ -213,15 +222,86 @@ class ServiceServer(
 
     @Suppress("LongMethod")
     private fun io.ktor.server.routing.Route.screenRoutes() {
+        get("/observe") {
+            val include = (call.request.queryParameters["include"] ?: "top,screen")
+                .split(",").map { it.trim().lowercase() }.toSet()
+            val maxRows = clampObserveMaxRows(call.request.queryParameters["max_rows"]?.toIntOrNull() ?: 120)
+
+            val topActivityBefore = readTopActivityOrNull()
+            val snapshot = collectScreenSnapshot()
+            val topActivityAfter = readTopActivityOrNull()
+            val topActivity = stableObservedTopActivity(topActivityBefore, topActivityAfter)
+            val allNodes = snapshot.windows.flatMap { flattenNodes(it.tree) }
+            val hasWebView = allNodes.any { (it.className ?: "").contains("WebView", ignoreCase = true) }
+            val nodeReliability = if (hasWebView || allNodes.isEmpty()) "low" else "high"
+
+            var screenSlice: ObserveScreenSlice? = null
+            if ("screen" in include) {
+                val rows = allNodes.take(maxRows).map { node ->
+                    kotlinx.serialization.json.buildJsonObject {
+                        put("id", kotlinx.serialization.json.JsonPrimitive(node.id))
+                        put("class", kotlinx.serialization.json.JsonPrimitive(node.className))
+                        node.text?.let { put("text", kotlinx.serialization.json.JsonPrimitive(it)) }
+                        node.contentDescription?.let { put("desc", kotlinx.serialization.json.JsonPrimitive(it)) }
+                        node.resourceId?.let { put("res_id", kotlinx.serialization.json.JsonPrimitive(it)) }
+                        put("bounds", kotlinx.serialization.json.JsonPrimitive(
+                            "${node.bounds.left},${node.bounds.top},${node.bounds.right},${node.bounds.bottom}"))
+                        val flags = buildNodeFlags(node)
+                        if (flags.isNotEmpty()) put("flags", kotlinx.serialization.json.JsonPrimitive(flags))
+                    }
+                }
+                screenSlice = ObserveScreenSlice(rowCount = allNodes.size, rows = rows)
+            }
+
+            var refsSlice: ObserveRefsSlice? = null
+            if ("refs" in include) {
+                val state = refreshRefState(snapshot)
+                lastObservedRefTokenMap = buildObservedRefTokenMap(state.refs, ::buildRefToken, ::buildRefIdentityToken)
+                val refRows = state.refs.take(maxRows).map {
+                    RefRowPayload(
+                        ref = it.ref,
+                        node_id = it.nodeId,
+                        class_name = it.className,
+                        text = it.text,
+                        desc = it.desc,
+                        res_id = it.resId,
+                        bounds = "${it.bounds.left},${it.bounds.top},${it.bounds.right},${it.bounds.bottom}",
+                        flags = buildRefFlags(it),
+                    )
+                }
+                refsSlice = ObserveRefsSlice(
+                    refVersion = state.version,
+                    refCount = state.refs.size,
+                    updatedAtMs = state.updatedAtMs,
+                    rows = refRows,
+                )
+            }
+
+            val payload = ObservePayload(
+                topActivity = topActivity,
+                mode = snapshot.mode,
+                hasWebView = hasWebView,
+                nodeReliability = nodeReliability,
+                screen = screenSlice,
+                refs = refsSlice,
+            )
+            call.respondText(ok(json.encodeToString(payload)), ContentType.Application.Json)
+        }
+
         get("/screen") {
+            val topActivityBefore = readTopActivityOrNull()
             val snapshot = collectScreenSnapshot()
             val result = MultiWindowResult(windows = snapshot.windows, degraded = snapshot.degraded)
+            val topActivityAfter = readTopActivityOrNull()
+            val topActivity = stableObservedTopActivity(topActivityBefore, topActivityAfter)
             val modeHeader = "[mode: ${snapshot.mode}]"
-            val tsv = "$modeHeader\n${compactTreeFormatter.formatMultiWindow(result, snapshot.screenInfo)}"
+            val topHeader = "[topActivity: ${topActivity ?: ""}]"
+            val tsv = "$modeHeader\n$topHeader\n${compactTreeFormatter.formatMultiWindow(result, snapshot.screenInfo)}"
             call.respondText(ok(tsv), ContentType.Application.Json)
         }
 
         get("/screen/refs") {
+            val topActivityBefore = readTopActivityOrNull()
             val refsResult = resolveRefsState()
             val state = refsResult.state
             lastObservedRefTokenMap = buildObservedRefTokenMap(state.refs, ::buildRefToken, ::buildRefIdentityToken)
@@ -239,6 +319,8 @@ class ServiceServer(
             }
             val hasWebView = rows.any { (it.class_name ?: "").contains("WebView", ignoreCase = true) }
             val nodeReliability = if (hasWebView || rows.isEmpty()) "low" else "high"
+            val topActivityAfter = readTopActivityOrNull()
+            val topActivity = stableObservedTopActivity(topActivityBefore, topActivityAfter)
             val payload = RefScreenPayload(
                 refVersion = state.version,
                 refCount = state.refs.size,
@@ -247,6 +329,7 @@ class ServiceServer(
                 hasWebView = hasWebView,
                 nodeReliability = nodeReliability,
                 rows = rows,
+                topActivity = topActivity,
             )
             call.respondText(ok(json.encodeToString(payload)), ContentType.Application.Json)
         }
@@ -777,6 +860,32 @@ class ServiceServer(
         )
     }
 
+    private fun readTopActivityOrNull(): String? = try {
+        toolRouter.appController.getTopActivity()
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun flattenNodes(node: AccessibilityNodeData): List<AccessibilityNodeData> {
+        val out = mutableListOf(node)
+        for (child in node.children) {
+            out.addAll(flattenNodes(child))
+        }
+        return out
+    }
+
+    private fun buildNodeFlags(node: AccessibilityNodeData): String {
+        val parts = mutableListOf<String>()
+        if (node.visible) parts.add("on")
+        if (node.clickable) parts.add("clk")
+        if (node.longClickable) parts.add("lng")
+        if (node.scrollable) parts.add("scr")
+        if (node.editable) parts.add("edt")
+        if (node.focusable) parts.add("fcs")
+        if (node.enabled) parts.add("ena")
+        return parts.joinToString(",")
+    }
+
     private fun buildMarks(
         windows: List<WindowData>,
         interactiveOnly: Boolean,
@@ -1112,6 +1221,30 @@ class ServiceServer(
     }
 
     @Serializable
+    data class ObservePayload(
+        val topActivity: String? = null,
+        val mode: ToolRouter.Mode,
+        val hasWebView: Boolean,
+        val nodeReliability: String,
+        val screen: ObserveScreenSlice? = null,
+        val refs: ObserveRefsSlice? = null,
+    )
+
+    @Serializable
+    data class ObserveScreenSlice(
+        val rowCount: Int,
+        val rows: List<kotlinx.serialization.json.JsonObject>,
+    )
+
+    @Serializable
+    data class ObserveRefsSlice(
+        val refVersion: Long,
+        val refCount: Int,
+        val updatedAtMs: Long,
+        val rows: List<RefRowPayload>,
+    )
+
+    @Serializable
     data class RefRowPayload(
         val ref: String,
         val node_id: String,
@@ -1132,6 +1265,7 @@ class ServiceServer(
         val hasWebView: Boolean,
         val nodeReliability: String,
         val rows: List<RefRowPayload>,
+        val topActivity: String? = null,
     )
 
     data class RefConfig(

@@ -34,13 +34,15 @@ export AF_TOKEN="<TOKEN>"
 export AF_DB="./af.db"
 ```
 
+`health` 只需要 `AF_URL`。`observe`、`act`、`verify`、`recover` 需要同时提供 `AF_URL` 和 `AF_TOKEN`。`af memory ...` 是纯本地命令，只依赖 `AF_DB`。
+
 先运行这些命令：
 
 ```bash
 af health
-af observe top
-af observe screen --max-rows 80 --field id --field text --field desc --field resId --field flags
-af observe refs --max-rows 80
+af observe page --field screen --field refs --max-rows 80
+af memory search --app com.android.settings
+af memory context
 af act tap --by ref --value @n1
 af act tap --by text --value "设置"
 af act tap --xy 540,1200
@@ -65,4 +67,5 @@ just install
 更多文档：
 
 - [CLI 说明](./cli/README.md)
+- [Memory 说明](./docs/CLI_MEMORY.md)
 - [设计文档](./docs/)

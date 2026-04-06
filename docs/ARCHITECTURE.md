@@ -1,12 +1,10 @@
-# Auto Fish server notes
-
-Only what is currently used.
+# Autofish Architecture
 
 ```text
 af (CLI)
   -> HTTP + Bearer Token
-RestServerService (foreground service)
-  -> RestServer (Ktor)
+Service (foreground service)
+  -> Server (Ktor)
      - /api/tap (coordinate tap)
      - /api/nodes/tap (semantic node tap by text/desc/resource id)
      - /api/screen/refs (clickable refs + refVersion)
@@ -88,6 +86,10 @@ sequenceDiagram
 
 - `refVersion` is still returned for state introspection and diagnostics.
 - Ref replay correctness is based on server-side alias-token mapping, not client-side version comparison.
+
+## CLI Tool Memory
+
+`af` keeps tool memory in CLI-local SQLite (`AF_DB`). See [`docs/CLI_MEMORY.md`](CLI_MEMORY.md) for data model, recording rules, and observation cache semantics.
 
 ## Android APIs by purpose
 

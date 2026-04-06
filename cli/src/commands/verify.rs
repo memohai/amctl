@@ -5,6 +5,7 @@ use serde_json::json;
 
 pub fn handle_text_contains(api: &ApiClient<'_>, text: &str, ignore_case: bool) -> CommandResult {
     let screen = api.screen().map_err(CommandError::from)?;
+    let searchable_raw = searchable_screen_raw(&screen.raw);
     let matched_rows = screen
         .rows
         .iter()
@@ -16,7 +17,7 @@ pub fn handle_text_contains(api: &ApiClient<'_>, text: &str, ignore_case: bool) 
         .cloned()
         .collect::<Vec<_>>();
     let matched_in_rows = !matched_rows.is_empty();
-    let matched_in_raw = matches_text(Some(&screen.raw), text, ignore_case);
+    let matched_in_raw = matches_text(Some(&searchable_raw), text, ignore_case);
     let matched = matched_in_rows || matched_in_raw;
     if !matched {
         return Err(CommandError::assertion_failed_with_details(
@@ -40,6 +41,22 @@ pub fn handle_text_contains(api: &ApiClient<'_>, text: &str, ignore_case: bool) 
         "matchedInRaw": matched_in_raw,
         "matchedRows": matched_rows
     }))
+}
+
+fn searchable_screen_raw(raw: &str) -> String {
+    raw.lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            !trimmed.is_empty()
+                && !trimmed.starts_with("[mode: ")
+                && !trimmed.starts_with("[topActivity: ")
+                && !trimmed.starts_with("screen:")
+                && !trimmed.starts_with("--- window:")
+                && trimmed != "node_id\tclass\ttext\tdesc\tres_id\tbounds\tflags"
+                && trimmed != "hierarchy:"
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn handle_top_activity(api: &ApiClient<'_>, expected: &str, mode: &str) -> CommandResult {
@@ -137,4 +154,24 @@ pub fn handle_node_exists(
         "nodes": found.nodes,
         "raw": found.raw
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::searchable_screen_raw;
+
+    #[test]
+    fn searchable_screen_raw_strips_metadata_headers() {
+        let raw = "[mode: V2_SHIZUKU]\n[topActivity: com.android.settings/.Settings]\nscreen:1080x1920\n--- window:1 type:APPLICATION ---\nnode_id\tclass\ttext\tdesc\tres_id\tbounds\tflags\nn1\tTextView\tWi-Fi\t-\tcom.a:id/title\t0,0,10,10\tclk\nhierarchy:\nn1";
+        let searchable = searchable_screen_raw(raw);
+        assert!(
+            !searchable.contains("topActivity"),
+            "metadata header should be removed"
+        );
+        assert!(!searchable.contains("V2_SHIZUKU"));
+        assert!(
+            searchable.contains("Wi-Fi"),
+            "screen row content should remain"
+        );
+    }
 }

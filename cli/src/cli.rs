@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{ArgGroup, Parser, ValueEnum};
+use clap::{ArgGroup, Args, Parser, ValueEnum};
 
 fn parse_non_negative_f32(v: &str) -> Result<f32, String> {
     let parsed = v
@@ -44,6 +44,12 @@ pub enum ScreenFieldArg {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PageSliceArg {
+    Screen,
+    Refs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum MarkScope {
     All,
     Interactive,
@@ -58,20 +64,8 @@ pub enum RefreshMode {
 #[derive(Parser, Debug)]
 #[command(name = "af", about = "Deterministic executor for Autofish REST API")]
 pub struct Cli {
-    #[arg(long, env = "AF_URL")]
-    pub url: String,
-
-    #[arg(long, env = "AF_TOKEN")]
-    pub token: Option<String>,
-
-    #[arg(long, default_value_t = 10000)]
-    pub timeout_ms: u64,
-
-    #[arg(long, value_enum, default_value_t = ProxyMode::Auto)]
-    pub proxy: ProxyMode,
-
-    #[arg(long = "no-trace", default_value_t = false)]
-    pub no_trace: bool,
+    #[arg(long = "no-memory", alias = "no-trace", default_value_t = false)]
+    pub no_memory: bool,
 
     #[arg(
         long,
@@ -79,36 +73,86 @@ pub struct Cli {
         default_value = "af.db",
         value_hint = clap::ValueHint::FilePath
     )]
-    pub trace_db: PathBuf,
+    pub memory_db: PathBuf,
 
-    #[arg(long, default_value = "default")]
+    #[arg(
+        long,
+        default_value = "default",
+        help = "Logical task session used to group memory across multiple CLI calls."
+    )]
     pub session: String,
 
     #[command(subcommand)]
     pub command: Commands,
 }
 
+#[derive(Args, Debug, Clone)]
+pub struct HealthRemoteOpts {
+    #[arg(long, env = "AF_URL")]
+    pub url: String,
+
+    #[arg(long, default_value_t = 10000)]
+    pub timeout_ms: u64,
+
+    #[arg(long, value_enum, default_value_t = ProxyMode::Auto)]
+    pub proxy: ProxyMode,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct AuthedRemoteOpts {
+    #[arg(long, env = "AF_URL")]
+    pub url: String,
+
+    #[arg(long, env = "AF_TOKEN")]
+    pub token: String,
+
+    #[arg(long, default_value_t = 10000)]
+    pub timeout_ms: u64,
+
+    #[arg(long, value_enum, default_value_t = ProxyMode::Auto)]
+    pub proxy: ProxyMode,
+}
+
 #[derive(clap::Subcommand, Debug)]
 pub enum Commands {
     #[command(name = "health", about = "Check service health")]
-    Health,
+    Health {
+        #[command(flatten)]
+        remote: HealthRemoteOpts,
+    },
     #[command(name = "act", about = "Run one device action")]
     Act {
+        #[command(flatten)]
+        remote: AuthedRemoteOpts,
         #[command(subcommand)]
         command: ActCommands,
     },
     #[command(name = "observe", about = "Observe device state")]
     Observe {
+        #[command(flatten)]
+        remote: AuthedRemoteOpts,
         #[command(subcommand)]
         command: ObserveCommands,
     },
     #[command(name = "verify", about = "Verify expected state")]
     Verify {
+        #[command(flatten)]
+        remote: AuthedRemoteOpts,
         #[command(subcommand)]
         command: VerifyCommands,
     },
+    #[command(
+        name = "memory",
+        about = "Query or inspect agent-oriented local memory"
+    )]
+    Memory {
+        #[command(subcommand)]
+        command: MemoryCommands,
+    },
     #[command(name = "recover", about = "Run simple recovery actions")]
     Recover {
+        #[command(flatten)]
+        remote: AuthedRemoteOpts,
         #[command(subcommand)]
         command: RecoverCommands,
     },
@@ -314,6 +358,22 @@ pub enum ObserveCommands {
         #[arg(long = "max-rows", default_value_t = 120)]
         max_rows: usize,
     },
+    #[command(
+        name = "page",
+        about = "Atomic page observation: top + screen + refs in one call",
+        long_about = "Observe page state atomically. Always returns base metadata; topActivity may be null when a stable value cannot be determined.\nUse --field to select additional data slices (default: screen). All data comes from the same point-in-time capture."
+    )]
+    Page {
+        #[arg(
+            long = "field",
+            value_name = "FIELD",
+            value_enum,
+            help = "Data slice to include. Repeatable: --field screen --field refs. Default: screen."
+        )]
+        fields: Vec<PageSliceArg>,
+        #[arg(long = "max-rows", default_value_t = 120)]
+        max_rows: usize,
+    },
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -395,6 +455,72 @@ pub enum VerifyCommands {
 }
 
 #[derive(clap::Subcommand, Debug)]
+pub enum MemoryCommands {
+    #[command(name = "save", about = "Save a knowledge note (append-only)")]
+    Save {
+        #[arg(long, default_value = "")]
+        app: String,
+        #[arg(long)]
+        topic: String,
+        #[arg(long)]
+        content: String,
+    },
+    #[command(
+        name = "search",
+        about = "Search notes by app, topic prefix, or keyword"
+    )]
+    Search {
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        topic: Option<String>,
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    #[command(name = "delete", about = "Delete a note by id")]
+    Delete {
+        #[arg(long)]
+        id: i64,
+    },
+    #[command(name = "log", about = "Query the event log")]
+    Log {
+        #[arg(long)]
+        session: Option<String>,
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    #[command(name = "stats", about = "Show event statistics")]
+    Stats {
+        #[arg(long)]
+        session: Option<String>,
+    },
+    #[command(
+        name = "experience",
+        about = "Query past transitions and recoveries (three-tier: page → activity → app)"
+    )]
+    Experience {
+        #[arg(long, default_value = "")]
+        app: String,
+        #[arg(long, default_value = "")]
+        activity: String,
+        #[arg(long = "page-fp", default_value = "")]
+        page_fingerprint: String,
+        #[arg(long = "failure-cause")]
+        failure_cause: Option<String>,
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
+    #[command(name = "context", about = "Show current session observation cache")]
+    Context,
+}
+
+#[derive(clap::Subcommand, Debug)]
 pub enum RecoverCommands {
     #[command(name = "back")]
     Back {
@@ -408,4 +534,76 @@ pub enum RecoverCommands {
         #[arg(long = "package")]
         package_name: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn memory_commands_parse_without_url() {
+        let cli = Cli::parse_from(["af", "--session", "demo", "memory", "log", "--limit", "5"]);
+        assert!(matches!(cli.command, Commands::Memory { .. }));
+    }
+
+    #[test]
+    fn remote_commands_require_url() {
+        let result = Cli::try_parse_from(["af", "observe", "top"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn authed_remote_commands_require_token() {
+        let result = Cli::try_parse_from([
+            "af",
+            "verify",
+            "--url",
+            "http://127.0.0.1:18080",
+            "text-contains",
+            "--text",
+            "x",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn health_requires_token() {
+        let cli = Cli::parse_from(["af", "health", "--url", "http://127.0.0.1:18080"]);
+        assert!(matches!(cli.command, Commands::Health { .. }));
+    }
+
+    #[test]
+    fn health_rejects_token_flag() {
+        let result = Cli::try_parse_from([
+            "af",
+            "health",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn old_global_url_shape_is_rejected_for_memory() {
+        let result =
+            Cli::try_parse_from(["af", "--url", "http://127.0.0.1:18080", "memory", "log"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remote_url_parses_under_subcommand() {
+        let cli = Cli::parse_from([
+            "af",
+            "observe",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
+            "page",
+        ]);
+        assert!(matches!(cli.command, Commands::Observe { .. }));
+    }
 }

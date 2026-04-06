@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct ReqClientBuilder {
-    pub session_id: String,
+    pub invocation_id: String,
     pub base_url: String,
     pub token: Option<String>,
     pub timeout_ms: u64,
@@ -16,9 +16,9 @@ pub struct ReqClientBuilder {
 
 impl ReqClientBuilder {
     pub fn new(base_url: String, timeout_ms: u64, proxy_mode: ProxyMode) -> Self {
-        let session_id = format!("session-{}", Uuid::new_v4());
+        let invocation_id = new_invocation_id();
         ReqClientBuilder {
-            session_id,
+            invocation_id,
             base_url,
             token: None,
             timeout_ms,
@@ -61,6 +61,10 @@ impl ReqClientBuilder {
             }
         }
     }
+}
+
+pub fn new_invocation_id() -> String {
+    format!("invoke-{}", Uuid::new_v4())
 }
 
 pub fn should_bypass_proxy(request_url: &str) -> bool {
