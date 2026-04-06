@@ -23,6 +23,8 @@ Excluded from fingerprint: `text`, `desc`, `row_count`, dynamic list content.
 
 ## Commands
 
+`af memory ...` is local-only. It reads/writes `AF_DB` (or `--memory-db`) and uses `--session` for task grouping, but it does not require `AF_URL` or `AF_TOKEN`.
+
 ### Knowledge notes (append-only)
 
 ```bash

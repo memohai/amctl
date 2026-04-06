@@ -42,6 +42,13 @@ af act tap --xy 540,1200
 af act swipe --from 100,1200 --to 900,1200 --duration 300
 ```
 
+`health` only requires `AF_URL`. `observe`, `act`, `verify`, and `recover` require both `AF_URL` and `AF_TOKEN`. `af memory ...` is local-only and can run with just `AF_DB`, for example:
+
+```bash
+af memory log --session demo --limit 10
+af memory context
+```
+
 ## Command groups
 
 - `health`
@@ -65,6 +72,7 @@ af act swipe --from 100,1200 --to 900,1200 --duration 300
 - `af memory experience` — query past transitions and recoveries (three-tier: page → activity → app)
 - `af memory context` — view current session observation cache (page fingerprint)
 - `af memory log / stats` — event log for `act` / `verify` / `recover` commands
+- `memory` commands do not require `--url`; only `AF_DB` / `--memory-db` and `--session` matter locally
 - `notes`, `events`, `transitions`, and `recoveries` persist across sessions; `session_state` is per-session observation cache only
 - `observe page` is the preferred single-call observation entrypoint; `observe top / screen / refs` still update session cache with quality-based overwrite and no extra HTTP calls
 - `topActivity` may be `null` on `observe page` when the service cannot confirm a stable value; in that case memory keeps the previous identity cache

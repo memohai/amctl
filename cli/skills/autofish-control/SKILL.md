@@ -35,8 +35,9 @@ export AF_TOKEN="<token>"
 export AF_DB="./af.db"
 ```
 
-`AF_URL` is required.  
-`AF_TOKEN` is required for protected calls.
+`af health` only requires `AF_URL`.  
+`observe`, `act`, `verify`, and `recover` require both `AF_URL` and `AF_TOKEN`.  
+`af memory ...` is local-only and only needs `AF_DB`.
 
 ## Workflow
 

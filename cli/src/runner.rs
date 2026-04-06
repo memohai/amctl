@@ -19,7 +19,6 @@ pub fn run_command(
     runtime: &ReqClientBuilder,
     ctrl_c_events: &Receiver<()>,
     cli: &Cli,
-    memory_store: Option<&MemoryStore>,
 ) -> Value {
     let api = ApiClient::new(
         client,
@@ -30,13 +29,13 @@ pub fn run_command(
     let command = &cli.command;
 
     match command {
-        Commands::Health => into_output(
+        Commands::Health { .. } => into_output(
             &runtime.invocation_id,
             "health",
             "health",
             observe_health(&api),
         ),
-        Commands::Act { command } => match command {
+        Commands::Act { command, .. } => match command {
             ActCommands::Tap {
                 xy,
                 by,
@@ -97,7 +96,7 @@ pub fn run_command(
                 act::handle_key(&api, *key_code),
             ),
         },
-        Commands::Observe { command } => match command {
+        Commands::Observe { command, .. } => match command {
             ObserveCommands::Screen {
                 full,
                 max_rows,
@@ -188,7 +187,7 @@ pub fn run_command(
                 observe::handle_page(&api, fields, *max_rows),
             ),
         },
-        Commands::Verify { command } => match command {
+        Commands::Verify { command, .. } => match command {
             VerifyCommands::TextContains { text, ignore_case } => into_output(
                 &runtime.invocation_id,
                 "verify",
@@ -212,90 +211,8 @@ pub fn run_command(
                 verify::handle_node_exists(&api, by, value, *exact_match),
             ),
         },
-        Commands::Memory { command } => match command {
-            MemoryCommands::Save {
-                app,
-                topic,
-                content,
-            } => into_output(
-                &runtime.invocation_id,
-                "memory",
-                "save",
-                memory::handle_save(memory_store, &cli.session, app, topic, content),
-            ),
-            MemoryCommands::Search {
-                app,
-                topic,
-                query,
-                limit,
-            } => into_output(
-                &runtime.invocation_id,
-                "memory",
-                "search",
-                memory::handle_search(
-                    memory_store,
-                    app.as_deref(),
-                    topic.as_deref(),
-                    query.as_deref(),
-                    *limit,
-                ),
-            ),
-            MemoryCommands::Delete { id } => into_output(
-                &runtime.invocation_id,
-                "memory",
-                "delete",
-                memory::handle_delete(memory_store, *id),
-            ),
-            MemoryCommands::Log {
-                session,
-                app,
-                status,
-                limit,
-            } => into_output(
-                &runtime.invocation_id,
-                "memory",
-                "log",
-                memory::handle_log(
-                    memory_store,
-                    session.as_deref(),
-                    app.as_deref(),
-                    status.as_deref(),
-                    *limit,
-                ),
-            ),
-            MemoryCommands::Stats { session } => into_output(
-                &runtime.invocation_id,
-                "memory",
-                "stats",
-                memory::handle_stats(memory_store, session.as_deref()),
-            ),
-            MemoryCommands::Experience {
-                app,
-                activity,
-                page_fingerprint,
-                failure_cause,
-                limit,
-            } => into_output(
-                &runtime.invocation_id,
-                "memory",
-                "experience",
-                memory::handle_experience(
-                    memory_store,
-                    app,
-                    activity,
-                    page_fingerprint,
-                    failure_cause.as_deref(),
-                    *limit,
-                ),
-            ),
-            MemoryCommands::Context => into_output(
-                &runtime.invocation_id,
-                "memory",
-                "context",
-                memory::handle_context(memory_store, &cli.session),
-            ),
-        },
-        Commands::Recover { command } => match command {
+        Commands::Memory { .. } => unreachable!("memory commands are handled locally"),
+        Commands::Recover { command, .. } => match command {
             RecoverCommands::Back { times } => into_output(
                 &runtime.invocation_id,
                 "recover",
@@ -315,6 +232,99 @@ pub fn run_command(
                 recover::handle_relaunch(&api, package_name),
             ),
         },
+    }
+}
+
+pub fn run_memory_command(
+    invocation_id: &str,
+    cli: &Cli,
+    memory_store: Option<&MemoryStore>,
+) -> Value {
+    match &cli.command {
+        Commands::Memory { command } => match command {
+            MemoryCommands::Save {
+                app,
+                topic,
+                content,
+            } => into_output(
+                invocation_id,
+                "memory",
+                "save",
+                memory::handle_save(memory_store, &cli.session, app, topic, content),
+            ),
+            MemoryCommands::Search {
+                app,
+                topic,
+                query,
+                limit,
+            } => into_output(
+                invocation_id,
+                "memory",
+                "search",
+                memory::handle_search(
+                    memory_store,
+                    app.as_deref(),
+                    topic.as_deref(),
+                    query.as_deref(),
+                    *limit,
+                ),
+            ),
+            MemoryCommands::Delete { id } => into_output(
+                invocation_id,
+                "memory",
+                "delete",
+                memory::handle_delete(memory_store, *id),
+            ),
+            MemoryCommands::Log {
+                session,
+                app,
+                status,
+                limit,
+            } => into_output(
+                invocation_id,
+                "memory",
+                "log",
+                memory::handle_log(
+                    memory_store,
+                    session.as_deref(),
+                    app.as_deref(),
+                    status.as_deref(),
+                    *limit,
+                ),
+            ),
+            MemoryCommands::Stats { session } => into_output(
+                invocation_id,
+                "memory",
+                "stats",
+                memory::handle_stats(memory_store, session.as_deref()),
+            ),
+            MemoryCommands::Experience {
+                app,
+                activity,
+                page_fingerprint,
+                failure_cause,
+                limit,
+            } => into_output(
+                invocation_id,
+                "memory",
+                "experience",
+                memory::handle_experience(
+                    memory_store,
+                    app,
+                    activity,
+                    page_fingerprint,
+                    failure_cause.as_deref(),
+                    *limit,
+                ),
+            ),
+            MemoryCommands::Context => into_output(
+                invocation_id,
+                "memory",
+                "context",
+                memory::handle_context(memory_store, &cli.session),
+            ),
+        },
+        _ => unreachable!("run_memory_command only handles memory commands"),
     }
 }
 
@@ -355,11 +365,13 @@ mod tests {
     fn persist_memory_records_event_for_act() {
         let cli = Cli::parse_from([
             "af",
-            "--url",
-            "http://127.0.0.1:18080",
             "--session",
             "wf-test",
             "act",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
             "back",
         ]);
         let store = Some(MemoryStore::new_in_memory().expect("init"));
@@ -386,11 +398,13 @@ mod tests {
     fn persist_memory_updates_session_state_for_observe_top() {
         let cli = Cli::parse_from([
             "af",
-            "--url",
-            "http://127.0.0.1:18080",
             "--session",
             "wf-test",
             "observe",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
             "top",
         ]);
         let store = Some(MemoryStore::new_in_memory().expect("init"));
@@ -417,11 +431,13 @@ mod tests {
     fn persist_memory_skips_observe_events() {
         let cli = Cli::parse_from([
             "af",
-            "--url",
-            "http://127.0.0.1:18080",
             "--session",
             "wf-test",
             "observe",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
             "top",
         ]);
         let store = Some(MemoryStore::new_in_memory().expect("init"));
@@ -451,11 +467,13 @@ mod tests {
 
         let cli = Cli::parse_from([
             "af",
-            "--url",
-            "http://127.0.0.1:18080",
             "--session",
             "wf-test",
             "act",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
             "back",
         ]);
         persist_memory(
@@ -493,11 +511,13 @@ mod tests {
 
         let cli_act = Cli::parse_from([
             "af",
-            "--url",
-            "http://127.0.0.1:18080",
             "--session",
             "wf-test",
             "act",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
             "tap",
             "--by",
             "text",
@@ -529,11 +549,13 @@ mod tests {
 
         let cli_verify = Cli::parse_from([
             "af",
-            "--url",
-            "http://127.0.0.1:18080",
             "--session",
             "wf-test",
             "verify",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
             "text-contains",
             "--text",
             "Wi-Fi",
@@ -573,11 +595,13 @@ mod tests {
 
         let cli_act = Cli::parse_from([
             "af",
-            "--url",
-            "http://127.0.0.1:18080",
             "--session",
             "wf-test",
             "act",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
             "tap",
             "--by",
             "text",
@@ -596,11 +620,13 @@ mod tests {
 
         let cli_verify = Cli::parse_from([
             "af",
-            "--url",
-            "http://127.0.0.1:18080",
             "--session",
             "wf-test",
             "verify",
+            "--url",
+            "http://127.0.0.1:18080",
+            "--token",
+            "demo-token",
             "text-contains",
             "--text",
             "Wi-Fi",

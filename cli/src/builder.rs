@@ -16,7 +16,7 @@ pub struct ReqClientBuilder {
 
 impl ReqClientBuilder {
     pub fn new(base_url: String, timeout_ms: u64, proxy_mode: ProxyMode) -> Self {
-        let invocation_id = format!("invoke-{}", Uuid::new_v4());
+        let invocation_id = new_invocation_id();
         ReqClientBuilder {
             invocation_id,
             base_url,
@@ -61,6 +61,10 @@ impl ReqClientBuilder {
             }
         }
     }
+}
+
+pub fn new_invocation_id() -> String {
+    format!("invoke-{}", Uuid::new_v4())
 }
 
 pub fn should_bypass_proxy(request_url: &str) -> bool {

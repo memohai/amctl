@@ -21,7 +21,8 @@ pub fn should_update_session_cache(command: &Commands) -> bool {
             command: ObserveCommands::Top
                 | ObserveCommands::Screen { .. }
                 | ObserveCommands::Refs { .. }
-                | ObserveCommands::Page { .. }
+                | ObserveCommands::Page { .. },
+            ..
         }
     )
 }
@@ -51,6 +52,7 @@ pub fn update_session_cache(
     match command {
         Commands::Observe {
             command: ObserveCommands::Top,
+            ..
         } => {
             // observe top returns: { "topActivity": "pkg/act" }
             if let Some(activity) = data.get("topActivity").and_then(Value::as_str) {
@@ -62,6 +64,7 @@ pub fn update_session_cache(
         }
         Commands::Observe {
             command: ObserveCommands::Screen { .. },
+            ..
         } => {
             let mode = data.get("mode").and_then(Value::as_str).unwrap_or("");
             let has_webview = data
@@ -113,6 +116,7 @@ pub fn update_session_cache(
         }
         Commands::Observe {
             command: ObserveCommands::Refs { .. },
+            ..
         } => {
             let mode = data.get("mode").and_then(Value::as_str).unwrap_or("");
             let has_webview = data
@@ -187,6 +191,7 @@ pub fn update_session_cache(
         }
         Commands::Observe {
             command: ObserveCommands::Page { .. },
+            ..
         } => {
             let activity = data
                 .get("topActivity")
@@ -450,7 +455,7 @@ fn extract_failure_cause(result: &Value) -> Option<String> {
 fn build_evidence_json(command: &Commands, result: &Value) -> String {
     let error_obj = result.get("error").cloned();
     match command {
-        Commands::Verify { command: vc } => {
+        Commands::Verify { command: vc, .. } => {
             let data = result.get("data").cloned().unwrap_or(json!({}));
             match vc {
                 VerifyCommands::TextContains { text, .. } => {
@@ -516,7 +521,7 @@ struct CommandShape {
 
 fn describe_command(command: &Commands) -> CommandShape {
     match command {
-        Commands::Act { command } => match command {
+        Commands::Act { command, .. } => match command {
             ActCommands::Tap {
                 xy,
                 by,
@@ -564,7 +569,7 @@ fn describe_command(command: &Commands) -> CommandShape {
                 args_json: json!({"keyCode": key_code}).to_string(),
             },
         },
-        Commands::Verify { command } => match command {
+        Commands::Verify { command, .. } => match command {
             VerifyCommands::TextContains { text, ignore_case } => CommandShape {
                 category: "verify".into(),
                 op: "text-contains".into(),
@@ -594,7 +599,7 @@ fn describe_command(command: &Commands) -> CommandShape {
                 .to_string(),
             },
         },
-        Commands::Recover { command } => match command {
+        Commands::Recover { command, .. } => match command {
             RecoverCommands::Back { times } => CommandShape {
                 category: "recover".into(),
                 op: "back".into(),
@@ -624,6 +629,23 @@ mod tests {
     use super::*;
     use clap::Parser;
 
+    fn parse_cli(args: &str) -> Cli {
+        let mut parts = vec!["af".to_string()];
+        let mut iter = args.split_whitespace();
+        let first = iter.next().expect("at least one command token");
+        parts.push(first.to_string());
+        if first != "memory" {
+            parts.push("--url".to_string());
+            parts.push("http://127.0.0.1:18080".to_string());
+            if first != "health" {
+                parts.push("--token".to_string());
+                parts.push("demo-token".to_string());
+            }
+        }
+        parts.extend(iter.map(str::to_string));
+        Cli::parse_from(parts)
+    }
+
     #[test]
     fn only_act_verify_recover_are_recorded() {
         let cases = [
@@ -635,8 +657,7 @@ mod tests {
             ("memory stats", false),
         ];
         for (args, expected) in cases {
-            let full_args = format!("af --url http://127.0.0.1:18080 {args}");
-            let cli = Cli::parse_from(full_args.split_whitespace());
+            let cli = parse_cli(args);
             assert_eq!(
                 should_record_event(&cli.command),
                 expected,
@@ -655,8 +676,7 @@ mod tests {
             ("act back", false),
         ];
         for (args, expected) in cases {
-            let full_args = format!("af --url http://127.0.0.1:18080 {args}");
-            let cli = Cli::parse_from(full_args.split_whitespace());
+            let cli = parse_cli(args);
             assert_eq!(
                 should_update_session_cache(&cli.command),
                 expected,
@@ -668,7 +688,7 @@ mod tests {
     #[test]
     fn observe_top_extracts_top_activity_field() {
         let store = MemoryStore::new_in_memory().expect("init");
-        let cli = Cli::parse_from("af --url http://127.0.0.1:18080 observe top".split_whitespace());
+        let cli = parse_cli("observe top");
         let result =
             json!({"status": "ok", "data": {"topActivity": "com.android.settings/.Settings"}});
         update_session_cache(&store, &cli.session, &cli.command, &result);
@@ -692,8 +712,7 @@ mod tests {
             .update_session_activity("default", "com.a", "com.a/.Main", "2026-01-01T00:00:00Z")
             .expect("seed");
 
-        let cli =
-            Cli::parse_from("af --url http://127.0.0.1:18080 observe screen".split_whitespace());
+        let cli = parse_cli("observe screen");
         let result = json!({
             "status": "ok",
             "data": {
@@ -725,8 +744,7 @@ mod tests {
             .update_session_activity("default", "com.a", "com.a/.Main", "2026-01-01T00:00:00Z")
             .expect("seed old activity");
 
-        let cli =
-            Cli::parse_from("af --url http://127.0.0.1:18080 observe screen".split_whitespace());
+        let cli = parse_cli("observe screen");
         let result = json!({
             "status": "ok",
             "data": {
@@ -761,8 +779,7 @@ mod tests {
             .update_session_activity("default", "com.a", "com.a/.Main", "2026-01-01T00:00:00Z")
             .expect("seed");
 
-        let cli =
-            Cli::parse_from("af --url http://127.0.0.1:18080 observe screen".split_whitespace());
+        let cli = parse_cli("observe screen");
         let result = json!({
             "status": "ok",
             "data": {
@@ -803,9 +820,7 @@ mod tests {
         };
         store.update_session_state("default", &ctx).expect("seed");
 
-        let cli = Cli::parse_from(
-            "af --url http://127.0.0.1:18080 observe refs --max-rows 80".split_whitespace(),
-        );
+        let cli = parse_cli("observe refs --max-rows 80");
         let result = json!({
             "status": "ok",
             "data": {
@@ -846,9 +861,7 @@ mod tests {
         };
         store.update_session_state("default", &ctx).expect("seed");
 
-        let cli = Cli::parse_from(
-            "af --url http://127.0.0.1:18080 observe refs --max-rows 80".split_whitespace(),
-        );
+        let cli = parse_cli("observe refs --max-rows 80");
         let result = json!({
             "status": "ok",
             "data": {
@@ -893,8 +906,7 @@ mod tests {
         };
         store.update_session_state("default", &ctx).expect("seed");
 
-        let cli =
-            Cli::parse_from("af --url http://127.0.0.1:18080 observe screen".split_whitespace());
+        let cli = parse_cli("observe screen");
         let result = json!({
             "status": "failed",
             "error": {"code": "NETWORK_ERROR", "message": "connection refused"}
@@ -928,9 +940,7 @@ mod tests {
         };
         store.update_session_state("default", &ctx).expect("seed");
 
-        let cli = Cli::parse_from(
-            "af --url http://127.0.0.1:18080 observe page --field refs".split_whitespace(),
-        );
+        let cli = parse_cli("observe page --field refs");
         let result = json!({
             "status": "ok",
             "data": {
@@ -999,10 +1009,7 @@ mod tests {
     fn observe_page_updates_session_with_atomic_data() {
         let store = MemoryStore::new_in_memory().expect("init");
 
-        let cli = Cli::parse_from(
-            "af --url http://127.0.0.1:18080 observe page --field screen --field refs"
-                .split_whitespace(),
-        );
+        let cli = parse_cli("observe page --field screen --field refs");
         let result = json!({
             "status": "ok",
             "data": {
@@ -1046,9 +1053,7 @@ mod tests {
     fn observe_page_refs_only_uses_refs_fingerprint() {
         let store = MemoryStore::new_in_memory().expect("init");
 
-        let cli = Cli::parse_from(
-            "af --url http://127.0.0.1:18080 observe page --field refs".split_whitespace(),
-        );
+        let cli = parse_cli("observe page --field refs");
         let result = json!({
             "status": "ok",
             "data": {
@@ -1081,8 +1086,7 @@ mod tests {
     fn observe_page_no_rows_builds_minimal_fingerprint() {
         let store = MemoryStore::new_in_memory().expect("init");
 
-        let cli =
-            Cli::parse_from("af --url http://127.0.0.1:18080 observe page".split_whitespace());
+        let cli = parse_cli("observe page");
         let result = json!({
             "status": "ok",
             "data": {

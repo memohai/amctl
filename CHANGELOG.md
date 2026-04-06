@@ -21,6 +21,8 @@ All notable changes to this project will be documented in this file.
 - Rename CLI opt-out flag to `--no-memory` and keep `--no-trace` as a compatibility alias.
 - Use CLI `--session` as the task grouping key for events and transitions.
 - Memory no longer captures page context via extra HTTP calls; context is derived from commands the agent already runs.
+- Make `af memory ...` a pure local command path. Remote options (`--url`, `--token`, `--timeout-ms`, `--proxy`) now belong to remote command groups instead of the global CLI root.
+- Require `--token` during CLI argument parsing for protected remote command groups (`observe`, `act`, `verify`, `recover`). `health` no longer accepts `--token`.
 - Notes are append-only; multiple notes with same `(app, topic)` coexist as historical chain (no more UPSERT overwrite).
 - Transition closing is deferred: pre-context comes from act's cached state, post-context from the subsequent verify. Never closes at act time.
 
@@ -37,6 +39,18 @@ All notable changes to this project will be documented in this file.
 - Replace `af memory delete --app ... --topic ...` with `af memory delete --id <note_id>`.
 - Existing `af.db` v1 tables (`memory_steps`, `memory_verifications`, `memory_transitions`, `memory_recoveries`) are incompatible; delete `af.db` to recreate.
 - Migration example: replace `af --no-trace ...` with `af --no-memory ...` in scripts.
+- CLI shape change:
+  - old: `af --url http://host:9998 memory log --session demo`
+  - new: `af memory log --session demo`
+- CLI shape change for explicit remote flags:
+  - old: `af --url http://host:9998 observe page --field refs`
+  - new: `af observe --url http://host:9998 page --field refs`
+- Protected remote commands now require `--token` at parse time:
+  - old: `af verify --url http://host:9998 text-contains --text Settings`
+  - new: `af verify --url http://host:9998 --token <token> text-contains --text Settings`
+- `health` no longer exposes `--token`:
+  - old: `af health --url http://host:9998 --token <token>`
+  - new: `af health --url http://host:9998`
 
 ## [0.2.1] - 2026-04-01
 

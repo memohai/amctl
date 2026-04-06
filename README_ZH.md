@@ -34,6 +34,8 @@ export AF_TOKEN="<TOKEN>"
 export AF_DB="./af.db"
 ```
 
+`health` 只需要 `AF_URL`。`observe`、`act`、`verify`、`recover` 需要同时提供 `AF_URL` 和 `AF_TOKEN`。`af memory ...` 是纯本地命令，只依赖 `AF_DB`。
+
 先运行这些命令：
 
 ```bash
