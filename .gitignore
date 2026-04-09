@@ -23,4 +23,8 @@ local.properties
 
 target/ 
 cli/target/
-.amctl-sessions/
+af.db
+
+.codex
+
+.history/
