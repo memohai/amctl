@@ -2,70 +2,75 @@
 
 English | [中文](./README_ZH.md)
 
-Autofish is an Android device control service with a deterministic CLI client (`af`).
+**A deterministic Android control layer for AI agents.**
 
-## Quickstart
+Autofish gives your agent a stable, explicit, and observable interface to Android devices. It does not plan tasks, orchestrate workflows, or make decisions — that is your agent's job. Autofish handles the last mile: seeing the screen, executing actions, verifying outcomes, and recovering from failures.
 
-### 1) Install app from GitHub Releases (APK)
-
-Download and install the latest APK from [Releases](https://github.com/memohai/Autofish/releases)
-
-Open the app, then:
-
-1. Enable accessibility permission for Autofish.
-2. Enable Shizuku support
-3. In Home page, turn on **Service**.
-4. Note the service connection info shown in app:
-   - Device IP
-   - Port
-   - Token
-
-### 2) Install `af` CLI from npm
-
-```bash
-npm i -g @memohjs/af
+```text
+human → agent → autofish → Android device
+         ↑                       |
+         └── observe / verify ───┘
 ```
 
-Initialize `af` config:
+## Why Autofish
+
+Multi-agent orchestration is a rapidly evolving discipline. How agents coordinate, plan, retry, and delegate will converge on best practices and dedicated platforms — much like microservice orchestration converged on Kubernetes. Device control is a different concern and should not be entangled with it.
+
+When planning and execution are fused, the agent loses authority over what actually happens, failures get absorbed instead of surfaced, and adopting a better orchestration strategy means rewriting the entire stack.
+
+Autofish keeps the boundary clean: **device control is infrastructure, not application logic.** Your agent — or whatever orchestration layer emerges — keeps full authority over planning and decision-making. Autofish provides deterministic device operations, explicit failure signals, and a queryable execution record. When the orchestration story matures, Autofish stays the same.
+
+## Design Principles
+
+| Principle | What it means in practice |
+|---|---|
+| **Single responsibility** | Android observation and control. No planning, no LLM calls, no workflow engine. |
+| **Agent-first interface** | The CLI and service API are shaped for machine consumption: structured output, deterministic exit codes, composable commands. |
+| **Deterministic surface** | Commands do exactly what they say. No implicit retries, no "smart" heuristics behind the scenes. |
+| **Closed-loop discipline** | Every action must be preceded by observation and followed by verification. The system enforces this through its memory model. |
+| **Graceful degradation** | Multiple execution paths coexist. When preferred capabilities are unavailable, fallback paths keep the system operational. |
+| **Observable execution** | Every action, state transition, and recovery is recorded with structured context — queryable by the agent mid-run. |
+
+## How It Works
+
+Autofish has two components:
+
+**Android Service** — A foreground service running on the device, exposing an HTTP API. It handles screenshots, UI tree inspection, tap/swipe/text input execution, and on-screen overlay annotations.
+
+**CLI (`af`)** — A Rust binary that talks to the service over HTTP. It provides the command interface, manages local tool memory (SQLite), and handles artifact storage. Distributed via npm (`@memohjs/af`).
+
+### The Observe-Act-Verify Loop
 
 ```bash
-af config set remote.url "http://<IP>:<PORT>"
-af config set remote.token "<TOKEN>"
-af config set memory.db "$HOME/.config/af/af.db"
-af config set output.default "text"
-af config set artifacts.dir "$HOME/.config/af/artifacts"
-```
-
-Run first commands:
-
-```bash
-af health
 af observe page --field screen --field refs --max-rows 80
-af memory search --app com.android.settings
-af memory context
-af act tap --by ref --value @n1
-af act tap --by text --value "Settings"
-af act tap --xy 540,1200
+af act tap --by ref --value @n3
+af verify text-contains --text "Wi-Fi"
+af memory save --app com.android.settings --topic "nav/home-to-wifi" \
+  --content "Tap @n3 (Wi-Fi) from main settings page"
 ```
 
-## Build from source requirements (optional)
+### Tool Memory
 
-If you want to build APK or CLI from source, prepare:
+The CLI maintains a local SQLite database that tracks:
 
-- JDK 17
-- Android SDK API 36
-- Rust toolchain (`cargo`)
-- `just`
+- **Events** — Every `act`, `verify`, and `recover` with page fingerprint, status, failure cause, and duration.
+- **Transitions** — Automatically closed act → verify pairs with success/failure counters.
+- **Recovery strategies** — Which recovery steps worked for which failure causes.
+- **Agent notes** — Append-only knowledge your agent writes and queries.
 
-Local source build example:
+## Documentation
+
+- [Quickstart](./docs/QUICKSTART.md) — From zero to first command
+- [CLI Reference](./cli/README.md) — All commands, flags, and output formats
+- [Architecture](./docs/ARCHITECTURE.md) — Service internals, refs design, API contracts
+- [CLI Memory](./docs/CLI_MEMORY.md) — Data model, recording rules, observation cache
+- [Changelog](./CHANGELOG.md) — Release history and breaking changes
+
+## Build from Source
+
+Requirements: JDK 17, Android SDK API 36, Rust toolchain, `just`.
 
 ```bash
 just build
 just install
 ```
-
-More docs:
-
-- [CLI details](./cli/README.md)
-- [Memory notes](./docs/CLI_MEMORY.md)
-- [Design docs](./docs/)
