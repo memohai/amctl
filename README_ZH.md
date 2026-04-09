@@ -26,15 +26,15 @@ Autofish 用来控制 Android 设备，配套的命令行工具是 `af`。
 npm i -g @memohjs/af
 ```
 
-设置环境变量：
+先用 `af config` 写入配置：
 
 ```bash
-export AF_URL="http://<IP>:<PORT>"
-export AF_TOKEN="<TOKEN>"
-export AF_DB="./af.db"
+af config set remote.url "http://<IP>:<PORT>"
+af config set remote.token "<TOKEN>"
+af config set memory.db "$HOME/.config/af/af.db"
+af config set output.default "text"
+af config set artifacts.dir "$HOME/.config/af/artifacts"
 ```
-
-`health` 只需要 `AF_URL`。`observe`、`act`、`verify`、`recover` 需要同时提供 `AF_URL` 和 `AF_TOKEN`。`af memory ...` 是纯本地命令，只依赖 `AF_DB`。
 
 先运行这些命令：
 

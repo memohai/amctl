@@ -26,15 +26,15 @@ Open the app, then:
 npm i -g @memohjs/af
 ```
 
-Set environment variables:
+Initialize `af` config:
 
 ```bash
-export AF_URL="http://<DEVICE_IP>:<PORT>"
-export AF_TOKEN="<TOKEN>"
-export AF_DB="./af.db"
+af config set remote.url "http://<IP>:<PORT>"
+af config set remote.token "<TOKEN>"
+af config set memory.db "$HOME/.config/af/af.db"
+af config set output.default "text"
+af config set artifacts.dir "$HOME/.config/af/artifacts"
 ```
-
-`AF_URL` is required for `health`. `AF_URL` + `AF_TOKEN` are required for `observe`, `act`, `verify`, and `recover`. `af memory ...` is local-only and only needs `AF_DB`.
 
 Run first commands:
 
@@ -56,7 +56,6 @@ If you want to build APK or CLI from source, prepare:
 - Android SDK API 36
 - Rust toolchain (`cargo`)
 - `just`
-
 
 Local source build example:
 

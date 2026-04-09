@@ -99,3 +99,21 @@ CREATE TABLE IF NOT EXISTS notes (
 
 CREATE INDEX IF NOT EXISTS idx_notes_app ON notes(app);
 CREATE INDEX IF NOT EXISTS idx_notes_topic ON notes(app, topic);
+
+-- Persisted large outputs and saved files
+CREATE TABLE IF NOT EXISTS artifacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    session TEXT NOT NULL DEFAULT '',
+    trace_id TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL,
+    op TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    content_hash TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session, created_at);
+CREATE INDEX IF NOT EXISTS idx_artifacts_trace ON artifacts(trace_id);

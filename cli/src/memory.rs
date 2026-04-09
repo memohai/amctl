@@ -71,6 +71,18 @@ pub struct EventRecord<'a> {
     pub duration_ms: i64,
 }
 
+pub struct ArtifactRecord<'a> {
+    pub session: &'a str,
+    pub trace_id: &'a str,
+    pub category: &'a str,
+    pub op: &'a str,
+    pub kind: &'a str,
+    pub mime_type: &'a str,
+    pub file_path: &'a std::path::Path,
+    pub size_bytes: i64,
+    pub content_hash: &'a str,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct EventStats {
     pub session: Option<String>,
@@ -883,6 +895,31 @@ impl MemoryStore {
     }
 
     // ── notes (append-only) ──
+
+    pub fn insert_artifact(&self, record: &ArtifactRecord<'_>) -> anyhow::Result<i64> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.connection
+            .execute(
+                "INSERT INTO artifacts (
+                    created_at, session, trace_id, category, op, kind,
+                    mime_type, file_path, size_bytes, content_hash
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    now,
+                    record.session,
+                    record.trace_id,
+                    record.category,
+                    record.op,
+                    record.kind,
+                    record.mime_type,
+                    record.file_path.display().to_string(),
+                    record.size_bytes,
+                    record.content_hash,
+                ],
+            )
+            .with_context(|| "failed to insert artifact")?;
+        Ok(self.connection.last_insert_rowid())
+    }
 
     pub fn save_note(
         &self,

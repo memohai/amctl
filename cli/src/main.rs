@@ -1,7 +1,9 @@
 mod api;
+mod artifact;
 mod builder;
 mod cli;
 mod commands;
+mod config;
 mod core;
 mod db;
 mod memory;
@@ -11,8 +13,10 @@ mod runner;
 
 use crate::builder::ReqClientBuilder;
 use crate::cli::Cli;
+use crate::config::{require_token, require_url, resolve_settings};
 use crate::memory::MemoryStore;
-use crate::runner::{persist_memory, run_command, run_memory_command};
+use crate::output::render_output;
+use crate::runner::{persist_memory, run_command, run_config_command, run_memory_command};
 use clap::Parser;
 use crossbeam_channel::{Receiver, bounded, select};
 use std::process;
@@ -21,21 +25,30 @@ use std::time::Instant;
 fn main() -> anyhow::Result<()> {
     let ctrl_c_events = ctrl_channel()?;
     let cli = Cli::parse();
-    let memory_store = if cli.no_memory {
-        None
-    } else {
-        Some(MemoryStore::new(cli.memory_db.clone())?)
-    };
+    let settings = resolve_settings(&cli)?;
+    let memory_store =
+        if cli.no_memory || matches!(cli.command, crate::cli::Commands::Config { .. }) {
+            None
+        } else {
+            Some(MemoryStore::new(settings.memory_db.clone())?)
+        };
     let started = Instant::now();
     let result = match &cli.command {
         crate::cli::Commands::Health { remote } => {
             let runtime = ReqClientBuilder::new(
-                remote.url.trim_end_matches('/').to_string(),
+                require_url(&settings)?.trim_end_matches('/').to_string(),
                 remote.timeout_ms,
                 remote.proxy,
             );
             let client = runtime.build()?;
-            let result = run_command(&client, &runtime, &ctrl_c_events, &cli);
+            let result = run_command(
+                &client,
+                &runtime,
+                &ctrl_c_events,
+                &cli,
+                &settings,
+                memory_store.as_ref(),
+            );
             persist_memory(
                 &memory_store,
                 &cli,
@@ -50,13 +63,20 @@ fn main() -> anyhow::Result<()> {
         | crate::cli::Commands::Verify { remote, .. }
         | crate::cli::Commands::Recover { remote, .. } => {
             let runtime = ReqClientBuilder::new(
-                remote.url.trim_end_matches('/').to_string(),
+                require_url(&settings)?.trim_end_matches('/').to_string(),
                 remote.timeout_ms,
                 remote.proxy,
             )
-            .with_token(Some(remote.token.clone()));
+            .with_token(Some(require_token(&settings)?.to_string()));
             let client = runtime.build()?;
-            let result = run_command(&client, &runtime, &ctrl_c_events, &cli);
+            let result = run_command(
+                &client,
+                &runtime,
+                &ctrl_c_events,
+                &cli,
+                &settings,
+                memory_store.as_ref(),
+            );
             persist_memory(
                 &memory_store,
                 &cli,
@@ -70,8 +90,12 @@ fn main() -> anyhow::Result<()> {
             let invocation_id = crate::builder::new_invocation_id();
             run_memory_command(&invocation_id, &cli, memory_store.as_ref())
         }
+        crate::cli::Commands::Config { .. } => {
+            let invocation_id = crate::builder::new_invocation_id();
+            run_config_command(&invocation_id, &cli, &settings)
+        }
     };
-    println!("{}", serde_json::to_string(&result)?);
+    println!("{}", render_output(&result, settings.output)?);
 
     let exit_code = match result.get("status").and_then(|value| value.as_str()) {
         Some("ok") => 0,

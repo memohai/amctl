@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Add local CLI config management: `af config list|get|set|unset`.
+- Add config file support via `--config`, `AF_CONFIG`, and default path `~/.config/af/config.toml`.
+- Add artifact persistence metadata table for large CLI outputs.
+
+### Changed
+- Default CLI output is now stable `text`/`key=value`; use `--output json` for structured output.
+- Remote CLI defaults can now be resolved from config/env instead of parse-time-only flags.
+- `observe screenshot`, `observe screen --full`, and large `observe page` screen payloads now save artifacts instead of inlining the full payload in command output.
+
+### BREAKING
+- CLI default output changed from one-line JSON to text.
+- Scripts that depend on prior JSON output must add `--output json`.
+
 ## [0.3.0] - 2026-04-09
 
 Range: `app-v0.2.1` (`9374656`) .. `app-v0.3.0`

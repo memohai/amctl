@@ -86,7 +86,10 @@ pub fn update_session_cache(
             };
             let app = package_name_from_activity(activity);
 
-            let raw_rows = data.get("rows").and_then(Value::as_array);
+            let raw_rows = data
+                .get("rows")
+                .and_then(Value::as_array)
+                .or_else(|| data.get("fingerprintRows").and_then(Value::as_array));
             let (page_fingerprint, fingerprint_source) = if let Some(raw_rows) = raw_rows {
                 let rows = extract_fingerprint_rows_from_screen(raw_rows);
                 (
@@ -220,7 +223,7 @@ pub fn update_session_cache(
             // Build fingerprint: prefer screen rows (strongest), fall back to refs rows
             let screen_rows = data
                 .get("screen")
-                .and_then(|s| s.get("rows"))
+                .and_then(|s| s.get("rows").or_else(|| s.get("fingerprintRows")))
                 .and_then(Value::as_array);
             let refs_rows = data
                 .get("refs")

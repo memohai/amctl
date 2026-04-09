@@ -32,6 +32,21 @@ pub enum ProxyMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum OutputFormat {
+    Text,
+    Json,
+}
+
+impl OutputFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            OutputFormat::Text => "text",
+            OutputFormat::Json => "json",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ScreenFieldArg {
     Id,
     Class,
@@ -64,16 +79,21 @@ pub enum RefreshMode {
 #[derive(Parser, Debug)]
 #[command(name = "af", about = "Deterministic executor for Autofish REST API")]
 pub struct Cli {
+    #[arg(long, env = "AF_CONFIG", value_hint = clap::ValueHint::FilePath)]
+    pub config: Option<PathBuf>,
+
+    #[arg(long, env = "AF_OUTPUT", value_enum)]
+    pub output: Option<OutputFormat>,
+
     #[arg(long = "no-memory", alias = "no-trace", default_value_t = false)]
     pub no_memory: bool,
 
     #[arg(
         long,
         env = "AF_DB",
-        default_value = "af.db",
         value_hint = clap::ValueHint::FilePath
     )]
-    pub memory_db: PathBuf,
+    pub memory_db: Option<PathBuf>,
 
     #[arg(
         long,
@@ -89,7 +109,7 @@ pub struct Cli {
 #[derive(Args, Debug, Clone)]
 pub struct HealthRemoteOpts {
     #[arg(long, env = "AF_URL")]
-    pub url: String,
+    pub url: Option<String>,
 
     #[arg(long, default_value_t = 10000)]
     pub timeout_ms: u64,
@@ -101,10 +121,10 @@ pub struct HealthRemoteOpts {
 #[derive(Args, Debug, Clone)]
 pub struct AuthedRemoteOpts {
     #[arg(long, env = "AF_URL")]
-    pub url: String,
+    pub url: Option<String>,
 
     #[arg(long, env = "AF_TOKEN")]
-    pub token: String,
+    pub token: Option<String>,
 
     #[arg(long, default_value_t = 10000)]
     pub timeout_ms: u64,
@@ -155,6 +175,11 @@ pub enum Commands {
         remote: AuthedRemoteOpts,
         #[command(subcommand)]
         command: RecoverCommands,
+    },
+    #[command(name = "config", about = "Read or update local af config")]
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
     },
 }
 
@@ -282,6 +307,12 @@ pub enum ObserveCommands {
         )]
         full: bool,
         #[arg(
+            long = "save-file",
+            value_hint = clap::ValueHint::FilePath,
+            help = "Save full screen payload as artifact JSON."
+        )]
+        save_file: Option<PathBuf>,
+        #[arg(
             long = "max-rows",
             help = "Maximum returned rows in compact mode. Default is 120.",
             conflicts_with = "full"
@@ -306,6 +337,12 @@ pub enum ObserveCommands {
     },
     #[command(name = "screenshot", about = "Capture a compressed screenshot")]
     Screenshot {
+        #[arg(
+            long = "save-file",
+            value_hint = clap::ValueHint::FilePath,
+            help = "Save screenshot image to this file instead of using the default artifact path."
+        )]
+        save_file: Option<PathBuf>,
         #[arg(
             long = "max-dim",
             value_parser = clap::value_parser!(i64).range(1..),
@@ -364,6 +401,12 @@ pub enum ObserveCommands {
         long_about = "Observe page state atomically. Always returns base metadata; topActivity may be null when a stable value cannot be determined.\nUse --field to select additional data slices (default: screen). All data comes from the same point-in-time capture."
     )]
     Page {
+        #[arg(
+            long = "save-dir",
+            value_hint = clap::ValueHint::DirPath,
+            help = "Directory for large page artifacts."
+        )]
+        save_dir: Option<PathBuf>,
         #[arg(
             long = "field",
             value_name = "FIELD",
@@ -521,6 +564,32 @@ pub enum MemoryCommands {
 }
 
 #[derive(clap::Subcommand, Debug)]
+pub enum ConfigCommands {
+    #[command(
+        name = "list",
+        about = "List effective config values and their sources"
+    )]
+    List,
+    #[command(name = "get", about = "Get one config key")]
+    Get {
+        #[arg()]
+        key: String,
+    },
+    #[command(name = "set", about = "Write one config key into the config file")]
+    Set {
+        #[arg()]
+        key: String,
+        #[arg()]
+        value: String,
+    },
+    #[command(name = "unset", about = "Remove one config key from the config file")]
+    Unset {
+        #[arg()]
+        key: String,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
 pub enum RecoverCommands {
     #[command(name = "back")]
     Back {
@@ -548,14 +617,17 @@ mod tests {
     }
 
     #[test]
-    fn remote_commands_require_url() {
-        let result = Cli::try_parse_from(["af", "observe", "top"]);
-        assert!(result.is_err());
+    fn remote_commands_allow_missing_url_for_later_resolution() {
+        let cli = Cli::parse_from(["af", "observe", "top"]);
+        match cli.command {
+            Commands::Observe { remote, .. } => assert!(remote.url.is_none()),
+            _ => panic!("expected observe command"),
+        }
     }
 
     #[test]
-    fn authed_remote_commands_require_token() {
-        let result = Cli::try_parse_from([
+    fn authed_remote_commands_allow_missing_token_for_later_resolution() {
+        let cli = Cli::parse_from([
             "af",
             "verify",
             "--url",
@@ -564,7 +636,13 @@ mod tests {
             "--text",
             "x",
         ]);
-        assert!(result.is_err());
+        match cli.command {
+            Commands::Verify { remote, .. } => {
+                assert_eq!(remote.url.as_deref(), Some("http://127.0.0.1:18080"));
+                assert!(remote.token.is_none());
+            }
+            _ => panic!("expected verify command"),
+        }
     }
 
     #[test]

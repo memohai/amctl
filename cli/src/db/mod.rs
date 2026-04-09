@@ -61,6 +61,7 @@ mod tests {
         "transitions",
         "recoveries",
         "notes",
+        "artifacts",
     ];
 
     #[test]

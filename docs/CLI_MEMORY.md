@@ -9,8 +9,10 @@
 - **`transitions`**: auto-tracked act → verify pairs with pre/post page context, success/verified/failure counters. Three-tier query: page → activity → app.
 - **`recoveries`**: auto-tracked recovery strategies linked to failure causes, with success/failure counters.
 - **`notes`**: append-only agent-driven knowledge. Multiple notes with same `(app, topic)` coexist as historical chain.
+- **`artifacts`**: saved large outputs such as screenshots and full observe payloads. SQLite stores metadata and file path; payload bytes live on disk.
 
 `events`, `transitions`, `recoveries`, and `notes` persist across sessions. `session_state` is session-scoped only.
+`artifacts` also persist across sessions when `AF_DB` is reused.
 
 ## Page Fingerprint
 
@@ -38,6 +40,23 @@ af memory context
 af memory log --session wf-1 --limit 20
 af memory stats --session wf-1
 ```
+
+## Artifact Storage
+
+Large observe results are saved as artifacts instead of being inlined into CLI output.
+
+- `observe screenshot` writes an image file and records artifact metadata.
+- `observe screen --full` writes the full JSON payload as an artifact.
+- `observe page` writes large screen payloads as artifacts and keeps only light metadata inline.
+
+Artifact file location precedence:
+
+1. Explicit CLI path such as `--save-file` or `--save-dir`
+2. Per-kind env vars: `AF_SCREEN_FILE`, `AF_SCREENSHOT_FILE`, `AF_PAGE_DIR`
+3. Config file keys: `artifacts.screen_file`, `artifacts.screenshot_file`, `artifacts.page_dir`
+4. Shared root: `AF_ARTIFACT_DIR` or `artifacts.dir`
+
+The SQLite `artifacts` table stores `session`, `trace_id`, `kind`, `mime_type`, `file_path`, `size_bytes`, and `content_hash`.
 
 ## Observation Cache
 

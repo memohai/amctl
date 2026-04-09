@@ -1,10 +1,13 @@
 use crate::api::request::ApiClient;
+use crate::artifact::ArtifactManager;
 use crate::builder::ReqClientBuilder;
 use crate::cli::{
-    ActCommands, Cli, Commands, MemoryCommands, ObserveCommands, OverlayCommands, RecoverCommands,
-    VerifyCommands,
+    ActCommands, Cli, Commands, ConfigCommands, MemoryCommands, ObserveCommands, OverlayCommands,
+    RecoverCommands, VerifyCommands,
 };
+use crate::commands::observe::ScreenshotOptions;
 use crate::commands::{act, common::OverlaySetOptions, memory, observe, recover, verify};
+use crate::config::{ResolvedSettings, get_entry, list_entries_map, set_key, unset_key};
 use crate::memory::MemoryStore;
 use crate::memory_recording::{
     record_event_and_close, should_record_event, should_update_session_cache, update_session_cache,
@@ -19,6 +22,8 @@ pub fn run_command(
     runtime: &ReqClientBuilder,
     ctrl_c_events: &Receiver<()>,
     cli: &Cli,
+    settings: &ResolvedSettings,
+    memory_store: Option<&MemoryStore>,
 ) -> Value {
     let api = ApiClient::new(
         client,
@@ -26,6 +31,15 @@ pub fn run_command(
         runtime.token.as_deref(),
         ctrl_c_events,
     );
+    let artifacts = ArtifactManager {
+        store: memory_store,
+        session: &cli.session,
+        invocation_id: &runtime.invocation_id,
+        artifact_dir: &settings.artifact_dir,
+        screen_file: settings.screen_file.as_deref(),
+        screenshot_file: settings.screenshot_file.as_deref(),
+        page_dir: &settings.page_dir,
+    };
     let command = &cli.command;
 
     match command {
@@ -99,13 +113,21 @@ pub fn run_command(
         Commands::Observe { command, .. } => match command {
             ObserveCommands::Screen {
                 full,
+                save_file,
                 max_rows,
                 fields,
             } => into_output(
                 &runtime.invocation_id,
                 "observe",
                 "screen",
-                observe::handle_screen(&api, *full, *max_rows, fields),
+                observe::handle_screen(
+                    &api,
+                    &artifacts,
+                    *full,
+                    save_file.as_deref(),
+                    *max_rows,
+                    fields,
+                ),
             ),
             ObserveCommands::Overlay { command } => match command {
                 OverlayCommands::Get => into_output(
@@ -148,6 +170,7 @@ pub fn run_command(
                 ),
             },
             ObserveCommands::Screenshot {
+                save_file,
                 max_dim,
                 quality,
                 annotate,
@@ -160,12 +183,16 @@ pub fn run_command(
                 "screenshot",
                 observe::handle_screenshot(
                     &api,
-                    *max_dim,
-                    *quality,
-                    *annotate,
-                    *hide_overlay,
-                    *max_marks,
-                    *mark_scope,
+                    &artifacts,
+                    ScreenshotOptions {
+                        max_dim: *max_dim,
+                        quality: *quality,
+                        annotate: *annotate,
+                        hide_overlay: *hide_overlay,
+                        max_marks: *max_marks,
+                        mark_scope: *mark_scope,
+                        save_file: save_file.as_deref(),
+                    },
                 ),
             ),
             ObserveCommands::Top => into_output(
@@ -180,11 +207,15 @@ pub fn run_command(
                 "refs",
                 observe::handle_refs(&api, *max_rows),
             ),
-            ObserveCommands::Page { fields, max_rows } => into_output(
+            ObserveCommands::Page {
+                save_dir,
+                fields,
+                max_rows,
+            } => into_output(
                 &runtime.invocation_id,
                 "observe",
                 "page",
-                observe::handle_page(&api, fields, *max_rows),
+                observe::handle_page(&api, &artifacts, save_dir.as_deref(), fields, *max_rows),
             ),
         },
         Commands::Verify { command, .. } => match command {
@@ -232,6 +263,7 @@ pub fn run_command(
                 recover::handle_relaunch(&api, package_name),
             ),
         },
+        Commands::Config { .. } => unreachable!("config commands are handled locally"),
     }
 }
 
@@ -325,6 +357,63 @@ pub fn run_memory_command(
             ),
         },
         _ => unreachable!("run_memory_command only handles memory commands"),
+    }
+}
+
+pub fn run_config_command(invocation_id: &str, cli: &Cli, settings: &ResolvedSettings) -> Value {
+    match &cli.command {
+        Commands::Config { command } => match command {
+            ConfigCommands::List => into_output(
+                invocation_id,
+                "config",
+                "list",
+                Ok(serde_json::to_value(list_entries_map(settings))
+                    .unwrap_or_else(|_| serde_json::json!({}))),
+            ),
+            ConfigCommands::Get { key } => into_output(
+                invocation_id,
+                "config",
+                "get",
+                match get_entry(settings, key) {
+                    Some(entry) => Ok(serde_json::json!({
+                        "key": entry.key,
+                        "value": entry.value,
+                        "source": entry.source,
+                    })),
+                    None => Err(crate::output::CommandError::invalid_params(format!(
+                        "unknown config key: {key}"
+                    ))),
+                },
+            ),
+            ConfigCommands::Set { key, value } => into_output(
+                invocation_id,
+                "config",
+                "set",
+                set_key(&settings.config_path, key, value)
+                    .map(|_| {
+                        serde_json::json!({
+                            "key": key,
+                            "value": value,
+                            "configPath": settings.config_path.display().to_string(),
+                        })
+                    })
+                    .map_err(|e| crate::output::CommandError::internal(e.to_string())),
+            ),
+            ConfigCommands::Unset { key } => into_output(
+                invocation_id,
+                "config",
+                "unset",
+                unset_key(&settings.config_path, key)
+                    .map(|_| {
+                        serde_json::json!({
+                            "key": key,
+                            "configPath": settings.config_path.display().to_string(),
+                        })
+                    })
+                    .map_err(|e| crate::output::CommandError::internal(e.to_string())),
+            ),
+        },
+        _ => unreachable!("run_config_command only handles config commands"),
     }
 }
 

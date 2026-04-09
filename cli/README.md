@@ -18,19 +18,22 @@ cargo build --release
 ## Run
 
 ```bash
-export AF_URL="http://127.0.0.1:8081"
-export AF_TOKEN="<token>"
-export AF_DB="./af.db"
-
+af config list
+af config set remote.url "http://<IP>:<PORT>"
+af config set remote.token "<token>"
+af config set memory.db "$HOME/.config/af/af.db"
+af config set output.default "text"
+af config set artifacts.dir "$HOME/.config/af/artifacts"
+af config list
 af health
+af observe screenshot
+af observe screen --full
 af observe page --field screen --field refs --max-rows 80
 af act tap --by ref --value @n1
 af verify text-contains --text "Settings"
 af memory search --app com.android.settings
 af memory experience --app com.android.settings --activity com.android.settings/.Settings
 ```
-
-`health` only requires `AF_URL`. `observe`, `act`, `verify`, and `recover` require both `AF_URL` and `AF_TOKEN`. `memory` is local-only and only needs `AF_DB`.
 
 ## Command groups
 
@@ -46,13 +49,51 @@ af memory experience --app com.android.settings --activity com.android.settings/
   - `save`, `search`, `delete`, `experience`, `context`, `log`, `stats`
 - `recover`:
   - `back`, `home`, `relaunch`
+- `config`:
+  - `list`, `get`, `set`, `unset`
 
 See [`docs/CLI_MEMORY.md`](../docs/CLI_MEMORY.md) for memory design details.
 
 ## Output and exit code
 
-Each command prints one JSON line.
+Default output is stable multi-line `key=value` text. Use `--output json` when a script needs the old structured envelope.
 
 - `status="ok"`: success, exit code `0`
 - `status="failed"`: error, exit code `1`
 - `status="interrupted"`: interrupted (SIGINT), exit code `130`
+
+## Config
+
+Config path resolution:
+
+```bash
+af --config ~/.config/af.toml config list # default path
+AF_CONFIG=~/.config/af.toml af config get artifacts.dir
+```
+
+Supported env/config keys include:
+
+- `AF_URL`, `AF_TOKEN`, `AF_DB`
+- `AF_OUTPUT`
+- `AF_ARTIFACT_DIR`
+- `AF_SCREEN_FILE`
+- `AF_SCREENSHOT_FILE`
+- `AF_PAGE_DIR`
+
+Example:
+
+```bash
+af config set remote.url "http://<IP>:<PORT>"
+af config set remote.token "demo-token"
+af config set memory.db "$HOME/.config/af/af.db"
+af config set artifacts.dir "$HOME/.config/af/artifacts"
+af config set output.default "text"
+```
+
+## Artifact Output
+
+Large observe payloads no longer inline image/base64 or full raw payloads in command output.
+
+- `observe screenshot` saves an image artifact and returns summary fields plus saved path.
+- `observe screen --full` saves the full JSON payload as an artifact.
+- `observe page --field screen` saves the large screen slice as an artifact and keeps light metadata inline.
