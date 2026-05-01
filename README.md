@@ -2,9 +2,9 @@
 
 English | [中文](./README_ZH.md)
 
-**A deterministic Android control layer for AI agents.**
+**Android control infrastructure for agents and multi-agent systems.**
 
-Autofish gives your agent a stable, explicit, and observable interface to Android devices. It does not plan tasks, orchestrate workflows, or make decisions — that is your agent's job. Autofish handles the last mile: seeing the screen, executing actions, verifying outcomes, and recovering from failures.
+Autofish gives any agent a stable, explicit, and observable Android execution layer: inspect the screen, act through stable refs instead of brittle coordinates, verify outcomes after every step, and recover with local execution memory.
 
 ```text
 human → agent → autofish → Android device
@@ -28,6 +28,15 @@ Use the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/re
 2. Enable Shizuku support when available.
 3. Turn on **Service** from the Autofish home page.
 4. Copy the `IP`, `PORT`, and `TOKEN` shown by the app.
+
+
+
+Notes:
+
+- **Service** must be turned on before `af health`, `observe`, `act`, or `verify` can reach the device.
+- If Shizuku is not running, Autofish can still use the accessibility fallback when **Accessibility Service** is enabled.
+- The service settings screen shows the `PORT` and `TOKEN`. Treat the token as a secret; do not publish screenshots or logs that reveal it.
+- If you connect over USB with adb port forwarding, forward the same port shown by the app and use `http://127.0.0.1:<PORT>` as `remote.url`.
 
 Install the CLI on your development machine:
 
@@ -174,6 +183,7 @@ Autofish keeps the boundary clean: **device control is infrastructure, not appli
 
 ## Design Principles
 
+
 | Principle                  | What it means in practice                                                                                                     |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **Single responsibility**  | Android observation and control. No planning, no LLM calls, no workflow engine.                                               |
@@ -182,6 +192,7 @@ Autofish keeps the boundary clean: **device control is infrastructure, not appli
 | **Closed-loop discipline** | Every action must be preceded by observation and followed by verification. The system enforces this through its memory model. |
 | **Graceful degradation**   | Multiple execution paths coexist. When preferred capabilities are unavailable, fallback paths keep the system operational.    |
 | **Observable execution**   | Every action, state transition, and recovery is recorded with structured context — queryable by the agent mid-run.            |
+
 
 ## Documentation
 
