@@ -573,10 +573,18 @@ fn describe_command(command: &Commands) -> CommandShape {
             },
         },
         Commands::Verify { command, .. } => match command {
-            VerifyCommands::TextContains { text, ignore_case } => CommandShape {
+            VerifyCommands::TextContains {
+                text,
+                case_sensitive,
+            } => CommandShape {
                 category: "verify".into(),
                 op: "text-contains".into(),
-                args_json: json!({"text": text, "ignoreCase": ignore_case}).to_string(),
+                args_json: json!({
+                    "text": text,
+                    "ignoreCase": !*case_sensitive,
+                    "caseSensitive": case_sensitive
+                })
+                .to_string(),
             },
             VerifyCommands::TopActivity { expected, mode } => CommandShape {
                 category: "verify".into(),

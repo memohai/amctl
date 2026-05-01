@@ -105,10 +105,14 @@ fn sanitize(value: &str) -> String {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    bytes.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    use std::fmt::Write as _;
+
+    let digest = ring::digest::digest(&ring::digest::SHA256, bytes);
+    let mut out = String::with_capacity(64);
+    for byte in digest.as_ref() {
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
 }
 
 pub fn json_bytes(value: &serde_json::Value) -> Result<Vec<u8>, CommandError> {
@@ -118,4 +122,17 @@ pub fn json_bytes(value: &serde_json::Value) -> Result<Vec<u8>, CommandError> {
 
 pub fn subdir(base: &Path, name: &str) -> PathBuf {
     base.join(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sha256_hex;
+
+    #[test]
+    fn sha256_hex_returns_sha256_digest() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
 }

@@ -90,6 +90,8 @@ af config set artifacts.dir "$HOME/.config/af/artifacts"
 af config set output.default "text"
 ```
 
+`config list` and `config get` show sensitive values such as `remote.token` as `<redacted>`.
+
 ## Artifact Output
 
 Large observe payloads no longer inline image/base64 or full raw payloads in command output.

@@ -7,7 +7,9 @@ use crate::cli::{
 };
 use crate::commands::observe::ScreenshotOptions;
 use crate::commands::{act, common::OverlaySetOptions, memory, observe, recover, verify};
-use crate::config::{ResolvedSettings, get_entry, list_entries_map, set_key, unset_key};
+use crate::config::{
+    ResolvedSettings, config_value_for_output, get_entry, list_entries_map, set_key, unset_key,
+};
 use crate::memory::MemoryStore;
 use crate::memory_recording::{
     record_event_and_close, should_record_event, should_update_session_cache, update_session_cache,
@@ -219,11 +221,14 @@ pub fn run_command(
             ),
         },
         Commands::Verify { command, .. } => match command {
-            VerifyCommands::TextContains { text, ignore_case } => into_output(
+            VerifyCommands::TextContains {
+                text,
+                case_sensitive,
+            } => into_output(
                 &runtime.invocation_id,
                 "verify",
                 "text-contains",
-                verify::handle_text_contains(&api, text, *ignore_case),
+                verify::handle_text_contains(&api, text, !*case_sensitive),
             ),
             VerifyCommands::TopActivity { expected, mode } => into_output(
                 &runtime.invocation_id,
@@ -393,7 +398,10 @@ pub fn run_config_command(invocation_id: &str, cli: &Cli, settings: &ResolvedSet
                     .map(|_| {
                         serde_json::json!({
                             "key": key,
-                            "value": value,
+                            "value": config_value_for_output(
+                                key,
+                                serde_json::Value::String(value.clone())
+                            ),
                             "configPath": settings.config_path.display().to_string(),
                         })
                     })

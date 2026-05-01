@@ -59,6 +59,7 @@ pub enum ConfigSource {
     Env,
     File,
     Default,
+    Unset,
 }
 
 impl ConfigSource {
@@ -68,6 +69,7 @@ impl ConfigSource {
             ConfigSource::Env => "env",
             ConfigSource::File => "file",
             ConfigSource::Default => "default",
+            ConfigSource::Unset => "unset",
         }
     }
 }
@@ -75,15 +77,22 @@ impl ConfigSource {
 #[derive(Debug, Clone)]
 pub struct ResolvedSettings {
     pub config_path: PathBuf,
-    pub file_config: FileConfig,
     pub output: OutputFormat,
+    pub output_source: ConfigSource,
     pub memory_db: PathBuf,
+    pub memory_db_source: ConfigSource,
     pub remote_url: Option<String>,
+    pub remote_url_source: Option<ConfigSource>,
     pub remote_token: Option<String>,
+    pub remote_token_source: Option<ConfigSource>,
     pub artifact_dir: PathBuf,
+    pub artifact_dir_source: ConfigSource,
     pub screen_file: Option<PathBuf>,
+    pub screen_file_source: Option<ConfigSource>,
     pub screenshot_file: Option<PathBuf>,
+    pub screenshot_file_source: Option<ConfigSource>,
     pub page_dir: PathBuf,
+    pub page_dir_source: ConfigSource,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -121,20 +130,20 @@ pub fn resolve_settings(cli: &Cli) -> anyhow::Result<ResolvedSettings> {
     let config_path = cli.config.clone().unwrap_or_else(default_config_path);
     let file_config = load_file_config(&config_path)?;
 
-    let output = resolve_output(cli, &file_config)?;
-    let memory_db = resolve_path(
+    let (output, output_source) = resolve_output(cli, &file_config)?;
+    let (memory_db, memory_db_source) = resolve_path(
         cli.memory_db.as_ref().cloned(),
         env::var_os(ENV_AF_DB).map(PathBuf::from),
         file_config.memory.db.as_ref().map(PathBuf::from),
         PathBuf::from("af.db"),
     );
-    let artifact_dir = resolve_path(
+    let (artifact_dir, artifact_dir_source) = resolve_path(
         None,
         env::var_os(ENV_AF_ARTIFACT_DIR).map(PathBuf::from),
         file_config.artifacts.dir.as_ref().map(PathBuf::from),
         default_artifact_dir(&config_path),
     );
-    let screen_file = resolve_optional_path(
+    let (screen_file, screen_file_source) = resolve_optional_path(
         env::var_os(ENV_AF_SCREEN_FILE).map(PathBuf::from),
         file_config
             .artifacts
@@ -142,7 +151,7 @@ pub fn resolve_settings(cli: &Cli) -> anyhow::Result<ResolvedSettings> {
             .as_ref()
             .map(PathBuf::from),
     );
-    let screenshot_file = resolve_optional_path(
+    let (screenshot_file, screenshot_file_source) = resolve_optional_path(
         env::var_os(ENV_AF_SCREENSHOT_FILE).map(PathBuf::from),
         file_config
             .artifacts
@@ -150,65 +159,98 @@ pub fn resolve_settings(cli: &Cli) -> anyhow::Result<ResolvedSettings> {
             .as_ref()
             .map(PathBuf::from),
     );
-    let page_dir = resolve_path(
+    let (page_dir, page_dir_source) = resolve_path(
         None,
         env::var_os(ENV_AF_PAGE_DIR).map(PathBuf::from),
         file_config.artifacts.page_dir.as_ref().map(PathBuf::from),
         artifact_dir.join("page"),
     );
 
-    let (remote_url, remote_token) = match &cli.command {
-        Commands::Health { remote } => (
-            resolve_optional_string(
+    let (remote_url, remote_url_source, remote_token, remote_token_source) = match &cli.command {
+        Commands::Health { remote } => {
+            let (remote_url, remote_url_source) = resolve_optional_string(
                 remote.url.clone(),
                 env::var(ENV_AF_URL).ok(),
                 file_config.remote.url.clone(),
-            ),
-            None,
-        ),
+            );
+            (remote_url, remote_url_source, None, None)
+        }
         Commands::Act { remote, .. }
         | Commands::Observe { remote, .. }
         | Commands::Verify { remote, .. }
-        | Commands::Recover { remote, .. } => (
-            resolve_optional_string(
+        | Commands::Recover { remote, .. } => {
+            let (remote_url, remote_url_source) = resolve_optional_string(
                 remote.url.clone(),
                 env::var(ENV_AF_URL).ok(),
                 file_config.remote.url.clone(),
-            ),
-            resolve_optional_string(
+            );
+            let (remote_token, remote_token_source) = resolve_optional_string(
                 remote.token.clone(),
                 env::var(ENV_AF_TOKEN).ok(),
                 file_config.remote.token.clone(),
-            ),
-        ),
-        _ => (None, None),
+            );
+            (
+                remote_url,
+                remote_url_source,
+                remote_token,
+                remote_token_source,
+            )
+        }
+        _ => {
+            let (remote_url, remote_url_source) = resolve_optional_string(
+                None,
+                env::var(ENV_AF_URL).ok(),
+                file_config.remote.url.clone(),
+            );
+            let (remote_token, remote_token_source) = resolve_optional_string(
+                None,
+                env::var(ENV_AF_TOKEN).ok(),
+                file_config.remote.token.clone(),
+            );
+            (
+                remote_url,
+                remote_url_source,
+                remote_token,
+                remote_token_source,
+            )
+        }
     };
 
     Ok(ResolvedSettings {
         config_path,
-        file_config,
         output,
+        output_source,
         memory_db,
+        memory_db_source,
         remote_url,
+        remote_url_source,
         remote_token,
+        remote_token_source,
         artifact_dir,
+        artifact_dir_source,
         screen_file,
+        screen_file_source,
         screenshot_file,
+        screenshot_file_source,
         page_dir,
+        page_dir_source,
     })
 }
 
-fn resolve_output(cli: &Cli, file_config: &FileConfig) -> anyhow::Result<OutputFormat> {
+fn resolve_output(
+    cli: &Cli,
+    file_config: &FileConfig,
+) -> anyhow::Result<(OutputFormat, ConfigSource)> {
     if let Some(value) = cli.output {
-        return Ok(value);
+        return Ok((value, ConfigSource::Cli));
     }
     if let Ok(value) = env::var(ENV_AF_OUTPUT) {
-        return parse_output_format(&value);
+        return parse_output_format(&value).map(|v| (v, ConfigSource::Env));
     }
     if let Some(value) = &file_config.output.default {
-        return parse_output_format(value);
+        return parse_output_format(value).map(|v| (v, ConfigSource::File));
     }
-    Ok(OutputFormat::Text)
+    Ok((OutputFormat::Text, ConfigSource::Default))
 }
 
 fn parse_output_format(value: &str) -> anyhow::Result<OutputFormat> {
@@ -224,26 +266,47 @@ fn resolve_path(
     env_value: Option<PathBuf>,
     file_value: Option<PathBuf>,
     default_value: PathBuf,
-) -> PathBuf {
-    cli_value
-        .or(env_value)
-        .or(file_value)
-        .unwrap_or(default_value)
+) -> (PathBuf, ConfigSource) {
+    if let Some(value) = cli_value {
+        return (value, ConfigSource::Cli);
+    }
+    if let Some(value) = env_value {
+        return (value, ConfigSource::Env);
+    }
+    if let Some(value) = file_value {
+        return (value, ConfigSource::File);
+    }
+    (default_value, ConfigSource::Default)
 }
 
 fn resolve_optional_path(
     env_value: Option<PathBuf>,
     file_value: Option<PathBuf>,
-) -> Option<PathBuf> {
-    env_value.or(file_value)
+) -> (Option<PathBuf>, Option<ConfigSource>) {
+    if let Some(value) = env_value {
+        return (Some(value), Some(ConfigSource::Env));
+    }
+    if let Some(value) = file_value {
+        return (Some(value), Some(ConfigSource::File));
+    }
+    (None, None)
 }
 
 fn resolve_optional_string(
     cli_value: Option<String>,
     env_value: Option<String>,
     file_value: Option<String>,
-) -> Option<String> {
-    cli_value.or(env_value).or(file_value)
+) -> (Option<String>, Option<ConfigSource>) {
+    if let Some(value) = cli_value {
+        return (Some(value), Some(ConfigSource::Cli));
+    }
+    if let Some(value) = env_value {
+        return (Some(value), Some(ConfigSource::Env));
+    }
+    if let Some(value) = file_value {
+        return (Some(value), Some(ConfigSource::File));
+    }
+    (None, None)
 }
 
 pub fn require_url(settings: &ResolvedSettings) -> anyhow::Result<&str> {
@@ -285,7 +348,11 @@ pub fn list_entries(settings: &ResolvedSettings) -> Vec<ConfigEntry> {
 }
 
 pub fn get_entry(settings: &ResolvedSettings, key: &str) -> Option<ConfigEntry> {
-    let value = effective_value(settings, key)?;
+    if !is_known_key(key) {
+        return None;
+    }
+    let value =
+        effective_value(settings, key).unwrap_or((serde_json::Value::Null, ConfigSource::Unset));
     Some(ConfigEntry {
         key: key.to_string(),
         value: value.0,
@@ -297,174 +364,82 @@ fn effective_value(
     settings: &ResolvedSettings,
     key: &str,
 ) -> Option<(serde_json::Value, ConfigSource)> {
-    match key {
+    let value = match key {
         "output.default" => effective_output(settings),
-        "remote.url" => effective_string(
-            settings,
-            key,
-            None,
-            Some(ENV_AF_URL),
-            settings.file_config.remote.url.as_deref(),
-            settings.remote_url.as_deref(),
-        ),
-        "remote.token" => effective_string(
-            settings,
-            key,
-            None,
-            Some(ENV_AF_TOKEN),
-            settings.file_config.remote.token.as_deref(),
+        "remote.url" => {
+            effective_optional_string(settings.remote_url.as_deref(), settings.remote_url_source)
+        }
+        "remote.token" => effective_optional_string(
             settings.remote_token.as_deref(),
+            settings.remote_token_source,
         ),
-        "memory.db" => effective_path(
-            settings,
-            key,
-            settings.memory_db.as_path(),
-            None,
-            Some(ENV_AF_DB),
-            settings.file_config.memory.db.as_deref(),
-            Some(PathBuf::from("af.db")),
-        ),
-        "artifacts.dir" => effective_path(
-            settings,
-            key,
-            settings.artifact_dir.as_path(),
-            None,
-            Some(ENV_AF_ARTIFACT_DIR),
-            settings.file_config.artifacts.dir.as_deref(),
-            Some(default_artifact_dir(&settings.config_path)),
-        ),
-        "artifacts.screen_file" => effective_optional_path(
-            key,
-            Some(ENV_AF_SCREEN_FILE),
-            settings.file_config.artifacts.screen_file.as_deref(),
-            settings.screen_file.as_deref(),
-        ),
+        "memory.db" => Some((
+            serde_json::Value::String(settings.memory_db.display().to_string()),
+            settings.memory_db_source,
+        )),
+        "artifacts.dir" => Some((
+            serde_json::Value::String(settings.artifact_dir.display().to_string()),
+            settings.artifact_dir_source,
+        )),
+        "artifacts.screen_file" => {
+            effective_optional_path(settings.screen_file.as_deref(), settings.screen_file_source)
+        }
         "artifacts.screenshot_file" => effective_optional_path(
-            key,
-            Some(ENV_AF_SCREENSHOT_FILE),
-            settings.file_config.artifacts.screenshot_file.as_deref(),
             settings.screenshot_file.as_deref(),
+            settings.screenshot_file_source,
         ),
-        "artifacts.page_dir" => effective_path(
-            settings,
-            key,
-            settings.page_dir.as_path(),
-            None,
-            Some(ENV_AF_PAGE_DIR),
-            settings.file_config.artifacts.page_dir.as_deref(),
-            Some(settings.artifact_dir.join("page")),
-        ),
+        "artifacts.page_dir" => Some((
+            serde_json::Value::String(settings.page_dir.display().to_string()),
+            settings.page_dir_source,
+        )),
         _ => None,
-    }
+    }?;
+    Some((config_value_for_output(key, value.0), value.1))
 }
 
 fn effective_output(settings: &ResolvedSettings) -> Option<(serde_json::Value, ConfigSource)> {
     if settings.config_path == PathBuf::new() {
         return None;
     }
-    if let Ok(value) = env::var(ENV_AF_OUTPUT) {
-        return Some((serde_json::Value::String(value), ConfigSource::Env));
-    }
-    if let Some(value) = &settings.file_config.output.default {
-        return Some((serde_json::Value::String(value.clone()), ConfigSource::File));
-    }
     Some((
         serde_json::Value::String(settings.output.as_str().to_string()),
-        ConfigSource::Default,
+        settings.output_source,
     ))
 }
 
-fn effective_string(
-    _settings: &ResolvedSettings,
-    _key: &str,
-    cli_value: Option<&str>,
-    env_key: Option<&str>,
-    file_value: Option<&str>,
-    effective: Option<&str>,
+fn effective_optional_string(
+    value: Option<&str>,
+    source: Option<ConfigSource>,
 ) -> Option<(serde_json::Value, ConfigSource)> {
-    if let Some(value) = cli_value {
-        return Some((
-            serde_json::Value::String(value.to_string()),
-            ConfigSource::Cli,
-        ));
-    }
-    if let Some(env_key) = env_key {
-        if let Ok(value) = env::var(env_key) {
-            return Some((serde_json::Value::String(value), ConfigSource::Env));
-        }
-    }
-    if let Some(value) = file_value {
-        return Some((
-            serde_json::Value::String(value.to_string()),
-            ConfigSource::File,
-        ));
-    }
-    effective.map(|v| {
-        (
-            serde_json::Value::String(v.to_string()),
-            ConfigSource::Default,
-        )
+    Some(match (value, source) {
+        (Some(value), Some(source)) => (serde_json::Value::String(value.to_string()), source),
+        _ => (serde_json::Value::Null, ConfigSource::Unset),
     })
-}
-
-fn effective_path(
-    _settings: &ResolvedSettings,
-    _key: &str,
-    effective: &Path,
-    cli_value: Option<&Path>,
-    env_key: Option<&str>,
-    file_value: Option<&str>,
-    default_value: Option<PathBuf>,
-) -> Option<(serde_json::Value, ConfigSource)> {
-    if let Some(value) = cli_value {
-        return Some((
-            serde_json::Value::String(value.display().to_string()),
-            ConfigSource::Cli,
-        ));
-    }
-    if let Some(env_key) = env_key {
-        if let Ok(value) = env::var(env_key) {
-            return Some((serde_json::Value::String(value), ConfigSource::Env));
-        }
-    }
-    if let Some(value) = file_value {
-        return Some((
-            serde_json::Value::String(value.to_string()),
-            ConfigSource::File,
-        ));
-    }
-    if default_value.is_some() {
-        return Some((
-            serde_json::Value::String(effective.display().to_string()),
-            ConfigSource::Default,
-        ));
-    }
-    None
 }
 
 fn effective_optional_path(
-    _key: &str,
-    env_key: Option<&str>,
-    file_value: Option<&str>,
-    effective: Option<&Path>,
+    value: Option<&Path>,
+    source: Option<ConfigSource>,
 ) -> Option<(serde_json::Value, ConfigSource)> {
-    if let Some(env_key) = env_key {
-        if let Ok(value) = env::var(env_key) {
-            return Some((serde_json::Value::String(value), ConfigSource::Env));
-        }
-    }
-    if let Some(value) = file_value {
-        return Some((
-            serde_json::Value::String(value.to_string()),
-            ConfigSource::File,
-        ));
-    }
-    effective.map(|value| {
-        (
+    Some(match (value, source) {
+        (Some(value), Some(source)) => (
             serde_json::Value::String(value.display().to_string()),
-            ConfigSource::Default,
-        )
+            source,
+        ),
+        _ => (serde_json::Value::Null, ConfigSource::Unset),
     })
+}
+
+pub fn config_value_for_output(key: &str, value: serde_json::Value) -> serde_json::Value {
+    if is_sensitive_key(key) && !value.is_null() {
+        serde_json::Value::String("<redacted>".to_string())
+    } else {
+        value
+    }
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    key == "remote.token"
 }
 
 pub fn set_key(config_path: &Path, key: &str, value: &str) -> anyhow::Result<()> {
@@ -524,7 +499,7 @@ fn apply_unset(config: &mut FileConfig, key: &str) {
 }
 
 fn ensure_known_key(key: &str) -> anyhow::Result<()> {
-    if known_keys().contains(&key) {
+    if is_known_key(key) {
         Ok(())
     } else {
         bail!("unsupported config key '{key}'")
@@ -544,6 +519,10 @@ pub fn known_keys() -> Vec<&'static str> {
     ]
 }
 
+fn is_known_key(key: &str) -> bool {
+    known_keys().contains(&key)
+}
+
 pub fn list_entries_map(settings: &ResolvedSettings) -> BTreeMap<String, serde_json::Value> {
     let mut out = BTreeMap::new();
     for entry in list_entries(settings) {
@@ -556,4 +535,106 @@ pub fn list_entries_map(settings: &ResolvedSettings) -> BTreeMap<String, serde_j
         );
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::Cli;
+    use clap::Parser;
+    use serde_json::json;
+
+    fn base_settings() -> ResolvedSettings {
+        ResolvedSettings {
+            config_path: PathBuf::from("/tmp/af-test-config.toml"),
+            output: OutputFormat::Text,
+            output_source: ConfigSource::Default,
+            memory_db: PathBuf::from("af.db"),
+            memory_db_source: ConfigSource::Default,
+            remote_url: None,
+            remote_url_source: None,
+            remote_token: None,
+            remote_token_source: None,
+            artifact_dir: PathBuf::from("/tmp/artifacts"),
+            artifact_dir_source: ConfigSource::Default,
+            screen_file: None,
+            screen_file_source: None,
+            screenshot_file: None,
+            screenshot_file_source: None,
+            page_dir: PathBuf::from("/tmp/artifacts/page"),
+            page_dir_source: ConfigSource::Default,
+        }
+    }
+
+    #[test]
+    fn known_optional_config_key_reports_unset() {
+        let settings = base_settings();
+
+        let entry = get_entry(&settings, "remote.url").expect("known key");
+
+        assert_eq!(entry.key, "remote.url");
+        assert_eq!(entry.source, "unset");
+        assert_eq!(entry.value, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn unknown_config_key_returns_none() {
+        let settings = base_settings();
+
+        assert!(get_entry(&settings, "remote.missing").is_none());
+    }
+
+    #[test]
+    fn config_list_includes_unset_optional_keys() {
+        let settings = base_settings();
+
+        let entries = list_entries_map(&settings);
+
+        assert_eq!(
+            entries.get("remote.url"),
+            Some(&json!({"source": "unset", "value": null}))
+        );
+        assert_eq!(
+            entries.get("artifacts.screen_file"),
+            Some(&json!({"source": "unset", "value": null}))
+        );
+    }
+
+    #[test]
+    fn cli_sources_are_preserved_for_root_options() {
+        let cli = Cli::parse_from([
+            "af",
+            "--config",
+            "/tmp/af-test-cli-sources.toml",
+            "--output",
+            "json",
+            "--memory-db",
+            "/tmp/source-cli.db",
+            "config",
+            "list",
+        ]);
+        let settings = resolve_settings(&cli).expect("resolve");
+        let entries = list_entries_map(&settings);
+
+        assert_eq!(
+            entries.get("output.default"),
+            Some(&json!({"source": "cli", "value": "json"}))
+        );
+        assert_eq!(
+            entries.get("memory.db"),
+            Some(&json!({"source": "cli", "value": "/tmp/source-cli.db"}))
+        );
+    }
+
+    #[test]
+    fn remote_token_output_is_redacted() {
+        let mut settings = base_settings();
+        settings.remote_token = Some("secret-token".into());
+        settings.remote_token_source = Some(ConfigSource::Env);
+
+        let entry = get_entry(&settings, "remote.token").expect("known key");
+
+        assert_eq!(entry.source, "env");
+        assert_eq!(entry.value, json!("<redacted>"));
+    }
 }

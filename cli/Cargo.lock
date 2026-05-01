@@ -96,6 +96,7 @@ dependencies = [
  "crossbeam-channel",
  "ctrlc",
  "reqwest",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",

@@ -8,15 +8,27 @@ All notable changes to this project will be documented in this file.
 - Add local CLI config management: `af config list|get|set|unset`.
 - Add config file support via `--config`, `AF_CONFIG`, and default path `~/.config/af/config.toml`.
 - Add artifact persistence metadata table for large CLI outputs.
+- Add `--case-sensitive` to `af verify text-contains`.
+- Add `--for-session` to `af memory log` and `af memory stats`.
 
 ### Changed
 - Default CLI output is now stable `text`/`key=value`; use `--output json` for structured output.
 - Remote CLI defaults can now be resolved from config/env instead of parse-time-only flags.
 - `observe screenshot`, `observe screen --full`, and large `observe page` screen payloads now save artifacts instead of inlining the full payload in command output.
 
+### Fixed
+- Distinguish unset config keys from unknown config keys in `af config get/list`.
+- Preserve CLI-provided config sources in `af config list`.
+- Redact `remote.token` in config command output.
+- Store real SHA-256 artifact content hashes.
+- Clarify packaged Autofish control skill examples so device commands keep the task session explicit.
+
 ### BREAKING
 - CLI default output changed from one-line JSON to text.
 - Scripts that depend on prior JSON output must add `--output json`.
+- Replace `af memory log --session <session>` with `af memory log --for-session <session>`.
+- Replace `af memory stats --session <session>` with `af memory stats --for-session <session>`.
+- Replace `af verify text-contains --ignore-case=false` with `af verify text-contains --case-sensitive`.
 
 ## [0.3.0] - 2026-04-09
 

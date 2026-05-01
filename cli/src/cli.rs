@@ -472,8 +472,8 @@ pub enum VerifyCommands {
     TextContains {
         #[arg(long)]
         text: String,
-        #[arg(long, default_value_t = true)]
-        ignore_case: bool,
+        #[arg(long = "case-sensitive", default_value_t = false)]
+        case_sensitive: bool,
     },
     #[command(name = "top-activity")]
     TopActivity {
@@ -529,7 +529,7 @@ pub enum MemoryCommands {
     },
     #[command(name = "log", about = "Query the event log")]
     Log {
-        #[arg(long)]
+        #[arg(long = "for-session")]
         session: Option<String>,
         #[arg(long)]
         app: Option<String>,
@@ -540,7 +540,7 @@ pub enum MemoryCommands {
     },
     #[command(name = "stats", about = "Show event statistics")]
     Stats {
-        #[arg(long)]
+        #[arg(long = "for-session")]
         session: Option<String>,
     },
     #[command(
@@ -683,5 +683,73 @@ mod tests {
             "page",
         ]);
         assert!(matches!(cli.command, Commands::Observe { .. }));
+    }
+
+    #[test]
+    fn text_contains_supports_case_sensitive_matching() {
+        let cli = Cli::parse_from([
+            "af",
+            "verify",
+            "text-contains",
+            "--text",
+            "Settings",
+            "--case-sensitive",
+        ]);
+        match cli.command {
+            Commands::Verify {
+                command: VerifyCommands::TextContains { case_sensitive, .. },
+                ..
+            } => {
+                assert!(case_sensitive);
+            }
+            _ => panic!("expected verify text-contains command"),
+        }
+    }
+
+    #[test]
+    fn text_contains_rejects_legacy_ignore_case_bool() {
+        let result = Cli::try_parse_from([
+            "af",
+            "verify",
+            "text-contains",
+            "--text",
+            "Settings",
+            "--ignore-case=false",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn memory_log_accepts_for_session_filter() {
+        let cli = Cli::parse_from(["af", "memory", "log", "--for-session", "wf-1"]);
+        match cli.command {
+            Commands::Memory {
+                command: MemoryCommands::Log { session, .. },
+            } => assert_eq!(session.as_deref(), Some("wf-1")),
+            _ => panic!("expected memory log command"),
+        }
+    }
+
+    #[test]
+    fn memory_log_rejects_session_filter() {
+        let result = Cli::try_parse_from(["af", "memory", "log", "--session", "wf-1"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn memory_stats_accepts_for_session_filter() {
+        let cli = Cli::parse_from(["af", "memory", "stats", "--for-session", "wf-1"]);
+        match cli.command {
+            Commands::Memory {
+                command: MemoryCommands::Stats { session },
+            } => assert_eq!(session.as_deref(), Some("wf-1")),
+            _ => panic!("expected memory stats command"),
+        }
+    }
+
+    #[test]
+    fn memory_stats_rejects_session_filter() {
+        let result = Cli::try_parse_from(["af", "memory", "stats", "--session", "wf-1"]);
+        assert!(result.is_err());
     }
 }

@@ -27,7 +27,8 @@ Excluded: `text`, `desc`, `row_count`, dynamic list content.
 
 ## Commands
 
-`af memory ...` is local-only. Only needs `AF_DB` (or `--memory-db`) and `--session`.
+`af memory ...` is local-only and only needs `AF_DB` (or `--memory-db`).
+Use global `--session` for `memory context` / `memory save`; use `--for-session` to filter `memory log` / `memory stats`.
 
 ```bash
 af memory save --app <pkg> --topic "nav/home-to-wifi" --content "..."
@@ -37,8 +38,8 @@ af memory delete --id 42
 af memory experience --app <pkg> --activity <act> --page-fp "<fingerprint>"
 af memory experience --app <pkg> --failure-cause REF_ALIAS_STALE
 af memory context
-af memory log --session wf-1 --limit 20
-af memory stats --session wf-1
+af memory log --for-session wf-1 --limit 20
+af memory stats --for-session wf-1
 ```
 
 ## Artifact Storage
