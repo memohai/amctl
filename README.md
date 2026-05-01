@@ -12,6 +12,158 @@ human → agent → autofish → Android device
          └── observe / verify ───┘
 ```
 
+## How It Works
+
+Autofish has two components:
+
+**Android Service** — A foreground service running on the device, exposing an HTTP API. It handles screenshots, UI tree inspection, tap/swipe/text input execution, and on-screen overlay annotations.
+
+**CLI (`af`)** — A Rust binary that talks to the service over HTTP. It provides the command interface, manages local tool memory (SQLite), and handles artifact storage. Distributed via npm (`@memohjs/af`).
+
+## Install and Connect
+
+Use the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/releases), then open the app on the Android device:
+
+1. Enable the Autofish accessibility service.
+2. Enable Shizuku support when available.
+3. Turn on **Service** from the Autofish home page.
+4. Copy the `IP`, `PORT`, and `TOKEN` shown by the app.
+
+Install the CLI on your development machine:
+
+```bash
+npm i -g @memohjs/af
+```
+
+Configure the CLI with the connection details from the Android app:
+
+```bash
+af config set remote.url "http://<IP>:<PORT>"
+af config set remote.token "<TOKEN>"
+af config set memory.db "$HOME/.config/af/af.db"
+af config set output.default "text"
+af config set artifacts.dir "$HOME/.config/af/artifacts"
+```
+
+Check the service before giving control to an agent:
+
+```bash
+af health
+af observe page --field screen --field refs --max-rows 80
+```
+
+## Configure the Autofish Skill
+
+The canonical skill file is:
+
+```text
+cli/skills/autofish-control/SKILL.md
+```
+
+Install it globally for Codex:
+
+```bash
+mkdir -p "$HOME/.agents/skills/autofish-control"
+cp cli/skills/autofish-control/SKILL.md "$HOME/.agents/skills/autofish-control/SKILL.md"
+```
+
+Install it globally for Claude Code:
+
+```bash
+mkdir -p "$HOME/.claude/skills/autofish-control"
+cp cli/skills/autofish-control/SKILL.md "$HOME/.claude/skills/autofish-control/SKILL.md"
+```
+
+## Use Autofish
+
+Autofish is most reliable when every action is based on a fresh observation and followed by verification.
+
+### 1. Create a session
+
+Use one stable session name per task so memory and event logs stay coherent:
+
+```bash
+SESSION="settings-wifi"
+```
+
+### 2. Observe the current page
+
+```bash
+af --session "$SESSION" observe page --field screen --field refs --max-rows 80
+```
+
+Use the returned refs for interaction. A ref such as `@n3` points to a clickable UI node from the latest observation.
+
+### 3. Run exactly one action
+
+Prefer ref-based taps:
+
+```bash
+af --session "$SESSION" act tap --by ref --value @n3
+```
+
+Other useful actions include:
+
+```bash
+af --session "$SESSION" act launch --package com.android.settings
+af --session "$SESSION" act text --text "hello"
+af --session "$SESSION" act back
+af --session "$SESSION" act home
+af --session "$SESSION" act swipe --from 500,1600 --to 500,600 --duration 400
+```
+
+### 4. Observe again and verify
+
+```bash
+af --session "$SESSION" observe page --field screen --field refs --max-rows 80
+af --session "$SESSION" verify text-contains --text "Wi-Fi"
+```
+
+When verifying app navigation, `top-activity` is often a better check:
+
+```bash
+af --session "$SESSION" verify top-activity --expected "Settings" --mode contains
+```
+
+### 5. Save useful knowledge
+
+For non-trivial navigation or recovery, save what worked:
+
+```bash
+af --session "$SESSION" memory save --app com.android.settings --topic "nav/home-to-wifi" \
+  --content "Tap @n3 (Wi-Fi) from the main Settings page, then verify text contains Wi-Fi."
+```
+
+Before repeating a similar task, query memory:
+
+```bash
+af --session "$SESSION" memory context
+af memory search --app com.android.settings
+af memory experience --app com.android.settings
+```
+
+### 6. Recover from uncertain state
+
+If the UI changed unexpectedly, do not continue with stale refs. Re-observe, inspect recent failures, then use one recovery step:
+
+```bash
+af --session "$SESSION" observe page --field screen --field refs --max-rows 120
+af memory log --for-session "$SESSION" --status failed --limit 5
+af --session "$SESSION" recover back --times 1
+af --session "$SESSION" observe page --field screen --field refs --max-rows 80
+```
+
+The same loop works for humans and agents: observe, take one action, observe again, verify, then continue.
+
+## Tool Memory
+
+The CLI maintains a local SQLite database that tracks:
+
+- **Events** — Every `act`, `verify`, and `recover` with page fingerprint, status, failure cause, and duration.
+- **Transitions** — Automatically closed act → verify pairs with success/failure counters.
+- **Recovery strategies** — Which recovery steps worked for which failure causes.
+- **Agent notes** — Append-only knowledge your agent writes and queries.
+
 ## Why Autofish
 
 Multi-agent orchestration is a rapidly evolving discipline. How agents coordinate, plan, retry, and delegate will converge on best practices and dedicated platforms — much like microservice orchestration converged on Kubernetes. Device control is a different concern and should not be entangled with it.
@@ -22,41 +174,14 @@ Autofish keeps the boundary clean: **device control is infrastructure, not appli
 
 ## Design Principles
 
-| Principle | What it means in practice |
-|---|---|
-| **Single responsibility** | Android observation and control. No planning, no LLM calls, no workflow engine. |
-| **Agent-first interface** | The CLI and service API are shaped for machine consumption: structured output, deterministic exit codes, composable commands. |
-| **Deterministic surface** | Commands do exactly what they say. No implicit retries, no "smart" heuristics behind the scenes. |
+| Principle                  | What it means in practice                                                                                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Single responsibility**  | Android observation and control. No planning, no LLM calls, no workflow engine.                                               |
+| **Agent-first interface**  | The CLI and service API are shaped for machine consumption: structured output, deterministic exit codes, composable commands. |
+| **Deterministic surface**  | Commands do exactly what they say. No implicit retries, no "smart" heuristics behind the scenes.                              |
 | **Closed-loop discipline** | Every action must be preceded by observation and followed by verification. The system enforces this through its memory model. |
-| **Graceful degradation** | Multiple execution paths coexist. When preferred capabilities are unavailable, fallback paths keep the system operational. |
-| **Observable execution** | Every action, state transition, and recovery is recorded with structured context — queryable by the agent mid-run. |
-
-## How It Works
-
-Autofish has two components:
-
-**Android Service** — A foreground service running on the device, exposing an HTTP API. It handles screenshots, UI tree inspection, tap/swipe/text input execution, and on-screen overlay annotations.
-
-**CLI (`af`)** — A Rust binary that talks to the service over HTTP. It provides the command interface, manages local tool memory (SQLite), and handles artifact storage. Distributed via npm (`@memohjs/af`).
-
-### The Observe-Act-Verify Loop
-
-```bash
-af observe page --field screen --field refs --max-rows 80
-af act tap --by ref --value @n3
-af verify text-contains --text "Wi-Fi"
-af memory save --app com.android.settings --topic "nav/home-to-wifi" \
-  --content "Tap @n3 (Wi-Fi) from main settings page"
-```
-
-### Tool Memory
-
-The CLI maintains a local SQLite database that tracks:
-
-- **Events** — Every `act`, `verify`, and `recover` with page fingerprint, status, failure cause, and duration.
-- **Transitions** — Automatically closed act → verify pairs with success/failure counters.
-- **Recovery strategies** — Which recovery steps worked for which failure causes.
-- **Agent notes** — Append-only knowledge your agent writes and queries.
+| **Graceful degradation**   | Multiple execution paths coexist. When preferred capabilities are unavailable, fallback paths keep the system operational.    |
+| **Observable execution**   | Every action, state transition, and recovery is recorded with structured context — queryable by the agent mid-run.            |
 
 ## Documentation
 
