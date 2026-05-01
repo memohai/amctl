@@ -70,17 +70,17 @@ Range: `app-v0.2.1` (`9374656`) .. `app-v0.3.0`
 - Existing `af.db` v1 tables (`memory_steps`, `memory_verifications`, `memory_transitions`, `memory_recoveries`) are incompatible; delete `af.db` to recreate.
 - Migration example: replace `af --no-trace ...` with `af --no-memory ...` in scripts.
 - CLI shape change:
-  - old: `af --url http://host:9998 memory log --session demo`
-  - new: `af memory log --session demo`
+  - old: `af --url http://host:<PORT> memory log --session demo`
+  - new: `af memory log --for-session demo`
 - CLI shape change for explicit remote flags:
-  - old: `af --url http://host:9998 observe page --field refs`
-  - new: `af observe --url http://host:9998 page --field refs`
+  - old: `af --url http://host:<PORT> observe page --field refs`
+  - new: `af observe --url http://host:<PORT> page --field refs`
 - Protected remote commands now require `--token` at parse time:
-  - old: `af verify --url http://host:9998 text-contains --text Settings`
-  - new: `af verify --url http://host:9998 --token <token> text-contains --text Settings`
+  - old: `af verify --url http://host:<PORT> text-contains --text Settings`
+  - new: `af verify --url http://host:<PORT> --token <token> text-contains --text Settings`
 - `health` no longer exposes `--token`:
-  - old: `af health --url http://host:9998 --token <token>`
-  - new: `af health --url http://host:9998`
+  - old: `af health --url http://host:<PORT> --token <token>`
+  - new: `af health --url http://host:<PORT>`
 
 ## [0.2.1] - 2026-04-01
 

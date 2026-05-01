@@ -5,15 +5,20 @@ af (CLI)
   -> HTTP + Bearer Token
 Service (foreground service)
   -> Server (Ktor)
-     - /api/tap (coordinate tap)
-     - /api/nodes/tap (semantic node tap by text/desc/resource id)
-     - /api/screen/refs (clickable refs + refVersion)
-     - /api/nodes/tap by=ref (server-side ref alias mapping: exact token first, identity token fallback only when unique)
+     - /health (unauthenticated service health)
+     - /api/observe (atomic top/screen/refs observation)
+     - /api/screen, /api/screen/refs, /api/screenshot
+     - /api/tap, /api/swipe, /api/press/*, /api/text
+     - /api/nodes/tap by text/desc/resource id/ref
+     - /api/overlay
+     - /api/app/launch, /api/app/stop, /api/app/top
   -> ToolRouter
       -> v2: system/shizuku/shell
       -> v1: accessibility (fallback)
   -> Android device
 ```
+
+`/health` is intentionally unauthenticated. `/api/*` routes require the bearer token configured in the Android app.
 
 ## Refs Design
 
@@ -89,7 +94,7 @@ sequenceDiagram
 
 ## CLI Tool Memory
 
-`af` keeps tool memory in CLI-local SQLite (`AF_DB`). See [`docs/CLI_MEMORY.md`](CLI_MEMORY.md) for data model, recording rules, and observation cache semantics.
+`af` keeps tool memory in CLI-local SQLite configured by `memory.db`, `AF_DB`, or `--memory-db`. See [`docs/CLI_MEMORY.md`](CLI_MEMORY.md) for data model, recording rules, and observation cache semantics.
 
 ## Android APIs by purpose
 

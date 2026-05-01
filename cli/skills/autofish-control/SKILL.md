@@ -15,12 +15,14 @@ Use deterministic control with evidence at every step.
 ## Setup
 
 ```bash
-af config set remote.url "http://<host>:9998"
+af config set remote.url "http://<IP>:<PORT>"
 af config set remote.token "<token>"
 af config set memory.db "$HOME/.config/af/af.db"
 af config set output.default "text"
 af config set artifacts.dir "$HOME/.config/af/artifacts"
 ```
+
+Copy `IP`, `PORT`, and `token` from the Autofish Android app. For USB port forwarding, use the forwarded local address, for example `http://127.0.0.1:<PORT>`.
 
 Environment variables also work: `AF_URL`, `AF_TOKEN`, `AF_DB`, `AF_OUTPUT`, `AF_ARTIFACT_DIR`.
 
@@ -84,7 +86,7 @@ Always returns: `topActivity`, `mode`, `hasWebView`, `nodeReliability`.
 | `screen` (default) | Row counts, fingerprint rows, and a JSON artifact path for full rows |
 | `refs` | Clickable ref aliases with `refVersion` |
 
-Use `data.screen.artifact.savedFile` when full page rows are needed. `observe screenshot` and overlay commands are diagnostics only; they do not refresh memory context.
+Use the returned `screen.artifact` saved path when full page rows are needed. `observe screenshot` and overlay commands are diagnostics only; they do not refresh memory context.
 
 `topActivity` is `null` when the service cannot confirm a stable value. Re-observe before acting.
 

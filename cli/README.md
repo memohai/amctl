@@ -18,6 +18,7 @@ cargo build --release
 ## Run
 
 ```bash
+SESSION="cli-demo"
 af config list
 af config set remote.url "http://<IP>:<PORT>"
 af config set remote.token "<token>"
@@ -26,11 +27,11 @@ af config set output.default "text"
 af config set artifacts.dir "$HOME/.config/af/artifacts"
 af config list
 af health
-af observe screenshot
-af observe screen --full
-af observe page --field screen --field refs --max-rows 80
-af act tap --by ref --value @n1
-af verify text-contains --text "Settings"
+af --session "$SESSION" observe screenshot
+af --session "$SESSION" observe screen --full
+af --session "$SESSION" observe page --field screen --field refs --max-rows 80
+af --session "$SESSION" act tap --by ref --value @n1
+af --session "$SESSION" verify text-contains --text "Settings"
 af memory search --app com.android.settings
 af memory experience --app com.android.settings --activity com.android.settings/.Settings
 ```
@@ -79,6 +80,8 @@ Supported env/config keys include:
 - `AF_SCREEN_FILE`
 - `AF_SCREENSHOT_FILE`
 - `AF_PAGE_DIR`
+
+Equivalent config keys are `remote.url`, `remote.token`, `memory.db`, `output.default`, `artifacts.dir`, `artifacts.screen_file`, `artifacts.screenshot_file`, and `artifacts.page_dir`.
 
 Example:
 
