@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-01
+
+Range: `app-v0.3.0` / `cli-v0.3.0` .. `app-v0.4.0` / `cli-v0.4.0`
+
 ### Added
 - Add local CLI config management: `af config list|get|set|unset`.
 - Add config file support via `--config`, `AF_CONFIG`, and default path `~/.config/af/config.toml`.
