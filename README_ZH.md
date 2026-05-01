@@ -34,6 +34,15 @@ Autofish 包含两个组件：
   <img src="./docs/assets/autofish-service-settings.png" alt="Autofish 服务设置页" width="260" />
 </p>
 
+Shizuku 设置：
+
+- 从 [RikkaApps/Shizuku GitHub Releases](https://github.com/RikkaApps/Shizuku/releases) 安装 Shizuku。
+- 按照官方 [Shizuku 设置指南](https://shizuku.rikka.app/guide/setup/) 启动 Shizuku。
+- Root 设备可以直接在 Shizuku 应用内启动。
+- Android 11+ 设备可以在 Shizuku 应用内使用无线调试启动，不需要电脑。
+- USB ADB 用户可以把设备连接到电脑，然后运行 Shizuku 应用中显示的启动命令。
+- 设备重启后通常需要重新启动 Shizuku。
+
 注意：
 
 - 执行 `af health`、`observe`、`act` 或 `verify` 之前，必须打开 **Service**。
