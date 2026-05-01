@@ -12,34 +12,61 @@ Use deterministic control with evidence at every step.
 - You need stable replay using refs (`@nK`) instead of coordinates.
 - You need explicit verification after each action.
 
-## Environment
+## Setup
 
 ```bash
-export AF_URL="http://<host>:9998"
-export AF_TOKEN="<token>"
-export AF_DB="./af.db"
+af config set remote.url "http://<host>:9998"
+af config set remote.token "<token>"
+af config set memory.db "$HOME/.config/af/af.db"
+af config set output.default "text"
+af config set artifacts.dir "$HOME/.config/af/artifacts"
 ```
 
-`af health` only requires `AF_URL`.
-`observe`, `act`, `verify`, `recover` require `AF_URL` + `AF_TOKEN`.
-`af memory ...` is local-only and only needs `AF_DB`.
+Environment variables also work: `AF_URL`, `AF_TOKEN`, `AF_DB`, `AF_OUTPUT`, `AF_ARTIFACT_DIR`.
+
+- `af health` only requires URL.
+- `observe`, `act`, `verify`, `recover` require URL + token.
+- `af memory ...` is local-only and requires memory enabled.
+- Use `--output json` when parsing results in scripts.
+- Check `af --help` first if the installed CLI may be older than this skill.
+
+Choose one session per task:
+
+```bash
+SESSION="task-name"
+af --session "$SESSION" observe page --field screen --field refs --max-rows 80
+```
+
+Do not reuse the default `default` session across unrelated tasks.
 
 ## Workflow
 
 1. Baseline:
-- `af observe page --field screen --field refs --max-rows 80`
-- `af memory search --app <current-app>`
-- `af memory experience --app <current-app> --activity <current-activity>`
+- `af --session <session> observe page --field screen --field refs --max-rows 80`
+- `af --session <session> memory context`
+- `af --session <session> memory search --app <current-app>`
+- `af --session <session> memory experience --app <current-app> --activity <current-activity> --page-fp "<page-fingerprint>"`
 
 2. One-step execution:
 - Run exactly one action command.
-- `af observe page` (add `--field refs` if needed).
+- Run `af --session <session> observe page` (add `--field refs` if needed).
 - Verify expected state.
 
 3. Continue only from fresh observations. Do not run blind action chains.
 
 4. After solving a non-trivial problem:
-- `af memory save --app <pkg> --topic "<category>/<name>" --content "<what you learned>"`
+- `af --session <session> memory save --app <pkg> --topic "<category>/<name>" --content "<what you learned>"`
+
+### Memory Loop
+
+For experience learning, keep this exact order:
+
+1. `observe` the starting page.
+2. Run one `act`.
+3. `observe` again.
+4. Run one `verify`.
+
+`act` and `recover` invalidate the cached page fingerprint. A transition is recorded only when a fresh successful observation happens after the action and before verification.
 
 ### observe page
 
@@ -47,10 +74,12 @@ Always returns: `topActivity`, `mode`, `hasWebView`, `nodeReliability`.
 
 | `--field` | What it adds |
 |---|---|
-| `screen` (default) | Full UI tree rows |
+| `screen` (default) | Row counts, fingerprint rows, and a JSON artifact path for full rows |
 | `refs` | Clickable ref aliases with `refVersion` |
 
-`topActivity` is `null` when the service cannot confirm a stable value; re-observe if that happens.
+Use `data.screen.artifact.savedFile` when full page rows are needed. `observe screenshot` and overlay commands are diagnostics only; they do not refresh memory context.
+
+`topActivity` is `null` when the service cannot confirm a stable value. Re-observe before acting.
 
 ## Tap Priority
 
@@ -58,36 +87,46 @@ Always returns: `topActivity`, `mode`, `hasWebView`, `nodeReliability`.
 2. `af act tap --by text|desc|resid --value "<value>" [--exact-match]`
 3. `af act tap --xy X,Y`
 
+Other actions exist for non-tap flows: `swipe`, `text`, `launch`, `stop`, `key`, `back`, `home`.
+
 ## Refs
 
 - Refresh refs on dynamic pages: `af observe page --field refs`.
-- If ref tap fails with stale/unobserved errors, re-observe and retry.
+- If ref tap fails with stale/unobserved errors, re-observe once and retry once.
 - Do not assume alias index stability after UI updates.
+- Do not auto-pick among ambiguous matching candidates.
 
 ## Verify Priority
 
 1. `af verify top-activity --expected "<activity>" --mode contains`
 2. `af verify text-contains --text "<text>"`
-3. `af verify node-exists --by text|desc|resid|class --value "<value>" [--exact-match]`
+3. `af verify node-exists --by text|desc|resource_id|class --value "<value>" [--exact-match]`
 
-On WebView-heavy pages (`nodeReliability=low`), prefer `text-contains`.
+`top-activity --mode` is `contains` or `equals`. `text-contains` is case-insensitive by default.
+
+On WebView-heavy pages (`hasWebView=true` or `nodeReliability=low`), prefer `text-contains`. Do not rely on node/ref structure inside WebView content.
 
 ## Recovery
 
 When state is uncertain:
-1. `af observe page --max-rows 120`
-2. `af memory experience --app <pkg> --activity <act> --failure-cause <cause>`
-3. `af recover back --times 1` (or `2`)
-4. `af memory log --session <current-session> --status failed --limit 5`
-5. Re-run baseline
+1. `af --session <session> observe page --max-rows 120`
+2. `af --session <session> memory experience --app <pkg> --activity <act> --failure-cause <cause>`
+3. Choose one recovery:
+- `af --session <session> recover back --times 1` for modal/back-stack drift.
+- `af --session <session> recover home` for lost navigation context.
+- `af --session <session> recover relaunch --package <pkg>` for app reset.
+4. `af --session <session> memory log --session <session> --status failed --limit 5`
+5. Re-run baseline.
 
 ## Diagnostics
 
 ```bash
 af observe overlay set --enable --mark-scope all --refresh on --refresh-interval-ms 800
-af observe screenshot --annotate --max-marks 120 --mark-scope interactive
+af observe screenshot --annotate --hide-overlay --max-marks 120 --mark-scope interactive
 af observe overlay set --disable --mark-scope all --refresh off
 ```
+
+Artifacts still write to disk when memory is disabled, but DB artifact ids may be absent.
 
 ## Memory Topic Conventions
 
@@ -101,7 +140,8 @@ af observe overlay set --disable --mark-scope all --refresh off
 ## Guidelines
 
 - Favor refs over coordinates.
-- Keep `--session` stable across one task.
-- Each action must be followed by observation and verification.
+- Keep `--session` stable and unique per task.
+- Each action must be followed by observation, then verification.
 - Use `af memory experience` before acting on unfamiliar pages.
 - Use `af memory context` to inspect the current cached page fingerprint.
+- Use `af memory log` and `af memory stats` to inspect failures and session quality.
