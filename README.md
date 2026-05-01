@@ -34,6 +34,15 @@ Use the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/re
   <img src="./docs/assets/autofish-service-settings.png" alt="Autofish service settings screen" width="260" />
 </p>
 
+Shizuku setup:
+
+- Install Shizuku from [RikkaApps/Shizuku GitHub Releases](https://github.com/RikkaApps/Shizuku/releases).
+- Follow the official [Shizuku setup guide](https://shizuku.rikka.app/guide/setup/).
+- Rooted devices can start Shizuku directly in the Shizuku app.
+- Android 11+ devices can use wireless debugging from the Shizuku app without a computer.
+- USB ADB users can connect the device to a computer and run the start command shown by the Shizuku app.
+- Shizuku usually needs to be started again after device reboot.
+
 Notes:
 
 - **Service** must be turned on before `af health`, `observe`, `act`, or `verify` can reach the device.
