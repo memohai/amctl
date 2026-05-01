@@ -29,7 +29,10 @@ Use the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/re
 3. Turn on **Service** from the Autofish home page.
 4. Copy the `IP`, `PORT`, and `TOKEN` shown by the app.
 
-
+<p>
+  <img src="./docs/assets/autofish-home.png" alt="Autofish home screen" width="260" />
+  <img src="./docs/assets/autofish-service-settings.png" alt="Autofish service settings screen" width="260" />
+</p>
 
 Notes:
 
