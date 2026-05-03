@@ -29,8 +29,6 @@ Use the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/re
 3. Turn on **Service** from the Autofish home page.
 4. Copy the `af config` commands or raw `IP` / `PORT` / `TOKEN` from the home page connection card.
 
-
-
 Shizuku setup:
 
 - Install Shizuku from [RikkaApps/Shizuku GitHub Releases](https://github.com/RikkaApps/Shizuku/releases).
@@ -204,7 +202,6 @@ Autofish keeps the boundary clean: **device control is infrastructure, not appli
 
 ## Design Principles
 
-
 | Principle                  | What it means in practice                                                                                                     |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **Single responsibility**  | Android observation and control. No planning, no LLM calls, no workflow engine.                                               |
@@ -214,6 +211,9 @@ Autofish keeps the boundary clean: **device control is infrastructure, not appli
 | **Graceful degradation**   | Multiple execution paths coexist. When preferred capabilities are unavailable, fallback paths keep the system operational.    |
 | **Observable execution**   | Every action, state transition, and recovery is recorded with structured context — queryable by the agent mid-run.            |
 
+## Contributing
+
+Contributions are welcome. If you want to improve Autofish, please start with an issue
 
 ## Documentation
 
