@@ -27,7 +27,7 @@ Autofish 包含两个组件：
 1. 启用 Autofish 无障碍服务。
 2. 可用时启用 Shizuku 支持。
 3. 在 Autofish 首页打开 **Service**。
-4. 复制应用中显示的 `IP`、`PORT` 和 `TOKEN`。
+4. 从首页连接信息卡片复制 `af config` 命令，或复制原始 `IP` / `PORT` / `TOKEN`。
 
 <p>
   <img src="./docs/assets/autofish-home.png" alt="Autofish 首页" width="260" />
@@ -47,8 +47,8 @@ Shizuku 设置：
 
 - 执行 `af health`、`observe`、`act` 或 `verify` 之前，必须打开 **Service**。
 - 如果 Shizuku 没有运行，只要 **Accessibility Service** 已启用，Autofish 仍可使用无障碍回退路径。
-- 服务设置页会显示 `PORT` 和 `TOKEN`。请把 token 当作密钥处理，不要公开包含它的截图或日志。
-- 如果通过 USB 和 adb 端口转发连接，请转发应用中显示的同一个端口，并使用 `http://127.0.0.1:<PORT>` 作为 `remote.url`。
+- 首页连接信息卡片可以复制 agent 可直接使用的 `af config` 命令。请把 token 当作密钥处理，不要公开包含它的截图或日志。
+- USB 连接优先使用 `af connect usb`；它会从 App 的非敏感连接 hint 自动建立 adb 转发。
 
 在开发机上安装 CLI：
 
@@ -56,7 +56,13 @@ Shizuku 设置：
 npm i -g @memohjs/af
 ```
 
-用 Android 应用里的连接信息配置 CLI：
+如果设备已经通过 adb 连接，可以安装与当前 `af` CLI 版本一致的官方 Autofish App：
+
+```bash
+af app install --device <ADB_SERIAL>
+```
+
+使用 Android 应用首页复制的命令配置 CLI，或手动设置这些值：
 
 ```bash
 af config set remote.url "http://<IP>:<PORT>"
@@ -65,6 +71,14 @@ af config set memory.db "$HOME/.config/af/af.db"
 af config set output.default "text"
 af config set artifacts.dir "$HOME/.config/af/artifacts"
 ```
+
+USB 连接可以使用 `af connect usb` 读取 App 的非敏感连接 hint，自动建立 adb 转发，并在不需要 token 的情况下验证 `/health`：
+
+```bash
+af connect usb --device <ADB_SERIAL>
+```
+
+`af connect usb` 会写入 `remote.url` 和 `connection.*` USB metadata。它不会写入 `remote.token`；`observe`、`act`、`verify`、`recover` 仍需要保留从 App 复制的 token。
 
 把控制权交给 agent 前，先检查服务：
 

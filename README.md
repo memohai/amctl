@@ -27,12 +27,9 @@ Use the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/re
 1. Enable the Autofish accessibility service.
 2. Enable Shizuku support when available.
 3. Turn on **Service** from the Autofish home page.
-4. Copy the `IP`, `PORT`, and `TOKEN` shown by the app.
+4. Copy the `af config` commands or raw `IP` / `PORT` / `TOKEN` from the home page connection card.
 
-<p>
-  <img src="./docs/assets/autofish-home.png" alt="Autofish home screen" width="260" />
-  <img src="./docs/assets/autofish-service-settings.png" alt="Autofish service settings screen" width="260" />
-</p>
+
 
 Shizuku setup:
 
@@ -47,8 +44,6 @@ Notes:
 
 - **Service** must be turned on before `af health`, `observe`, `act`, or `verify` can reach the device.
 - If Shizuku is not running, Autofish can still use the accessibility fallback when **Accessibility Service** is enabled.
-- The service settings screen shows the `PORT` and `TOKEN`. Treat the token as a secret; do not publish screenshots or logs that reveal it.
-- If you connect over USB with adb port forwarding, forward the same port shown by the app and use `http://127.0.0.1:<PORT>` as `remote.url`.
 
 Install the CLI on your development machine:
 
@@ -56,7 +51,13 @@ Install the CLI on your development machine:
 npm i -g @memohjs/af
 ```
 
-Configure the CLI with the connection details from the Android app:
+If the device is connected with adb, install the official Autofish App version that matches the current `af` CLI:
+
+```bash
+af app install --device <ADB_SERIAL>
+```
+
+Configure the CLI with the commands copied from the Android app home page, or set the values manually:
 
 ```bash
 af config set remote.url "http://<IP>:<PORT>"
@@ -65,6 +66,14 @@ af config set memory.db "$HOME/.config/af/af.db"
 af config set output.default "text"
 af config set artifacts.dir "$HOME/.config/af/artifacts"
 ```
+
+For USB, `af connect usb` reads the App's non-sensitive connection hint, creates adb forwarding, and verifies `/health` without requiring a token:
+
+```bash
+af connect usb --device <ADB_SERIAL>
+```
+
+`af connect usb` writes `remote.url` and `connection.*` USB metadata. It does not write `remote.token`; keep the token copied from the app for `observe`, `act`, `verify`, and `recover`.
 
 Check the service before giving control to an agent:
 

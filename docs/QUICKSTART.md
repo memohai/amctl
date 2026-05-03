@@ -2,36 +2,48 @@
 
 The shortest path from a fresh Android install to a working `af observe page`.
 
-## 1. Install the Android app
+## 1. Install the CLI
+
+```bash
+npm i -g @memohjs/af
+```
+
+## 2. Install the Android app
 
 Install the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/releases).
+
+If the device is connected with adb, the CLI can install the matching official App release:
+
+```bash
+af app install --device <ADB_SERIAL>
+```
 
 On the device:
 
 1. Enable accessibility permission for Autofish.
 2. Enable Shizuku support when available.
 3. Turn on **Service** on the home page.
-4. Copy the `IP`, `PORT`, and `TOKEN` shown by the app.
+4. Copy the `af config` commands from the home page connection card.
 
 If Shizuku is not running, Autofish can still use the accessibility fallback when the accessibility service is enabled.
 
-## 2. Install the CLI
-
-```bash
-npm i -g @memohjs/af
-```
-
 ## 3. Configure the connection
 
+Run the `remote.url` and `remote.token` commands copied from the app, then add local defaults:
+
 ```bash
-af config set remote.url "http://<IP>:<PORT>"
-af config set remote.token "<TOKEN>"
 af config set memory.db "$HOME/.config/af/af.db"
 af config set output.default "text"
 af config set artifacts.dir "$HOME/.config/af/artifacts"
 ```
 
-For USB port forwarding, forward the same port shown by the app and use `http://127.0.0.1:<PORT>` as `remote.url`.
+For USB, let the CLI read the App's non-sensitive connection hint and configure adb forwarding:
+
+```bash
+af connect usb --device <ADB_SERIAL>
+```
+
+`af connect usb` replaces the copied `remote.url` with a local forwarded URL and records USB metadata under `connection.*`. It does not write `remote.token`, so keep the token copied from the app for commands beyond `af health`.
 
 ## 4. Check the service
 

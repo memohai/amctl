@@ -24,6 +24,14 @@ af config set artifacts.dir "$HOME/.config/af/artifacts"
 
 Copy `IP`, `PORT`, and `token` from the Autofish Android app. For USB port forwarding, use the forwarded local address, for example `http://127.0.0.1:<PORT>`.
 
+If the device is connected with adb and the App is new enough to write a connection hint, prefer:
+
+```bash
+af connect usb --device <ADB_SERIAL>
+```
+
+`af connect usb` writes the forwarded `remote.url` and `connection.*` USB metadata, verifies `af health`, and does not write `remote.token`. Keep the token copied from the app for `observe`, `act`, `verify`, and `recover`.
+
 Environment variables also work: `AF_URL`, `AF_TOKEN`, `AF_DB`, `AF_OUTPUT`, `AF_ARTIFACT_DIR`.
 
 - `af health` only requires URL.

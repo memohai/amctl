@@ -26,6 +26,9 @@ af config set memory.db "$HOME/.config/af/af.db"
 af config set output.default "text"
 af config set artifacts.dir "$HOME/.config/af/artifacts"
 af config list
+af app install --device <ADB_SERIAL>
+af app uninstall --device <ADB_SERIAL> --dry-run
+af connect usb --device <ADB_SERIAL>
 af health
 af --session "$SESSION" observe screenshot
 af --session "$SESSION" observe screen --full
@@ -52,8 +55,13 @@ af memory experience --app com.android.settings --activity com.android.settings/
   - `back`, `home`, `relaunch`
 - `config`:
   - `list`, `get`, `set`, `unset`
+- `app`:
+  - `install` installs the official Autofish App over adb. Defaults to the App release matching the current CLI version.
+  - `uninstall` removes the official Autofish App over adb.
+- `connect`:
+  - `usb` reads the App connection hint, creates adb forwarding, verifies `/health`, and writes local connection metadata.
 
-See [`docs/CLI_MEMORY.md`](../docs/CLI_MEMORY.md) for memory design details.
+See [docs/CLI_MEMORY.md](../docs/CLI_MEMORY.md) for memory design details.
 
 ## Output and exit code
 
@@ -81,7 +89,7 @@ Supported env/config keys include:
 - `AF_SCREENSHOT_FILE`
 - `AF_PAGE_DIR`
 
-Equivalent config keys are `remote.url`, `remote.token`, `memory.db`, `output.default`, `artifacts.dir`, `artifacts.screen_file`, `artifacts.screenshot_file`, and `artifacts.page_dir`.
+Equivalent config keys are `remote.url`, `remote.token`, `connection.transport`, `connection.usb.device`, `connection.usb.local_port`, `connection.usb.device_port`, `memory.db`, `output.default`, `artifacts.dir`, `artifacts.screen_file`, `artifacts.screenshot_file`, and `artifacts.page_dir`.
 
 Example:
 
@@ -94,6 +102,33 @@ af config set output.default "text"
 ```
 
 `config list` and `config get` show sensitive values such as `remote.token` as `<redacted>`.
+
+## App Install
+
+`af app install` is a local adb command. It does not require the Autofish HTTP service to be installed or running.
+
+```bash
+af app install --device <ADB_SERIAL>
+af app install --device <ADB_SERIAL> --version 0.4.0 --dry-run
+af app uninstall --device <ADB_SERIAL>
+af app uninstall --device <ADB_SERIAL> --dry-run
+```
+
+By default, `--version current` installs the App release matching the current `af` CLI version. The command skips the install when the same version is already present, upgrades older versions, and refuses to downgrade unless `--force` is passed. To reinstall, run `af app uninstall` first. Downloaded APKs are cached under `$AF_CACHE_DIR` or `~/.cache/af`.
+
+## USB Connect
+
+`af connect usb` is a local adb command. It reads the Autofish App hint from the release or debug package under `/sdcard/Android/data/.../files/connection-hint.json`; the hint contains only package/version, service port, running status, and update time.
+
+```bash
+af connect usb --device <ADB_SERIAL>
+af connect usb --device <ADB_SERIAL> --local-port 18081
+af connect usb --device <ADB_SERIAL> --print-only
+```
+
+The command writes `remote.url`, `connection.transport=usb-forward`, `connection.usb.device`, `connection.usb.local_port`, and `connection.usb.device_port`. It does not write `remote.token`; `/health` remains token-free.
+
+`af health` includes local connection metadata in output as `connection.transport`, `connection.device`, `connection.url`, `connection.localPort`, and `connection.devicePort`. When transport metadata is not configured, `connection.transport` is `unknown`.
 
 ## Artifact Output
 

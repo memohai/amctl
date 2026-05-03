@@ -3,6 +3,7 @@
 ```text
 af (CLI)
   -> HTTP + Bearer Token
+  -> local adb helpers (app install, USB forwarding)
 Service (foreground service)
   -> Server (Ktor)
      - /health (unauthenticated service health)
@@ -19,6 +20,21 @@ Service (foreground service)
 ```
 
 `/health` is intentionally unauthenticated. `/api/*` routes require the bearer token configured in the Android app.
+
+## USB Connection Hint
+
+The Android app writes a non-sensitive adb-readable hint at `Android/data/com.memohai.autofish/files/connection-hint.json`.
+It contains package/version metadata, `servicePort`, `serviceRunning`, and `updatedAt`; it must not include tokens, screen content, refs, logs, or task data.
+
+`af connect usb` reads this hint with adb, creates `adb forward tcp:<localPort> tcp:<servicePort>`, verifies `/health`, and writes local CLI metadata:
+
+- `remote.url`
+- `connection.transport = "usb-forward"`
+- `connection.usb.device`
+- `connection.usb.local_port`
+- `connection.usb.device_port`
+
+`af connect usb` does not write `remote.token`. Agent control commands still need the token from the app, while `af health` remains token-free and reports the local connection metadata when configured.
 
 ## Refs Design
 
