@@ -25,6 +25,17 @@ impl CommandError {
         }
     }
 
+    pub fn invalid_params_with_details(message: impl Into<String>, details: Value) -> Self {
+        Self {
+            code: ErrorCode::InvalidParams,
+            message: message.into(),
+            retryable: false,
+            status: None,
+            raw: None,
+            details: Some(details),
+        }
+    }
+
     pub fn assertion_failed_with_details(message: impl Into<String>, details: Value) -> Self {
         Self {
             code: ErrorCode::AssertionFailed,

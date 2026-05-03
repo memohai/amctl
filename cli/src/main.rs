@@ -16,7 +16,10 @@ use crate::cli::Cli;
 use crate::config::{require_token, require_url, resolve_settings};
 use crate::memory::MemoryStore;
 use crate::output::render_output;
-use crate::runner::{persist_memory, run_command, run_config_command, run_memory_command};
+use crate::runner::{
+    persist_memory, run_app_command, run_command, run_config_command, run_connect_command,
+    run_memory_command,
+};
 use clap::Parser;
 use crossbeam_channel::{Receiver, bounded, select};
 use std::process;
@@ -26,12 +29,17 @@ fn main() -> anyhow::Result<()> {
     let ctrl_c_events = ctrl_channel()?;
     let cli = Cli::parse();
     let settings = resolve_settings(&cli)?;
-    let memory_store =
-        if cli.no_memory || matches!(cli.command, crate::cli::Commands::Config { .. }) {
-            None
-        } else {
-            Some(MemoryStore::new(settings.memory_db.clone())?)
-        };
+    let memory_store = if cli.no_memory
+        || matches!(
+            cli.command,
+            crate::cli::Commands::Config { .. }
+                | crate::cli::Commands::App { .. }
+                | crate::cli::Commands::Connect { .. }
+        ) {
+        None
+    } else {
+        Some(MemoryStore::new(settings.memory_db.clone())?)
+    };
     let started = Instant::now();
     let result = match &cli.command {
         crate::cli::Commands::Health { remote } => {
@@ -93,6 +101,14 @@ fn main() -> anyhow::Result<()> {
         crate::cli::Commands::Config { .. } => {
             let invocation_id = crate::builder::new_invocation_id();
             run_config_command(&invocation_id, &cli, &settings)
+        }
+        crate::cli::Commands::App { .. } => {
+            let invocation_id = crate::builder::new_invocation_id();
+            run_app_command(&invocation_id, &cli)
+        }
+        crate::cli::Commands::Connect { .. } => {
+            let invocation_id = crate::builder::new_invocation_id();
+            run_connect_command(&invocation_id, &cli, &settings)
         }
     };
     println!("{}", render_output(&result, settings.output)?);

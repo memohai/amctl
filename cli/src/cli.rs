@@ -24,6 +24,35 @@ fn parse_non_negative_points2(v: &str) -> Result<[f32; 2], String> {
     Ok([x, y])
 }
 
+fn parse_app_install_version(v: &str) -> Result<String, String> {
+    let value = v.trim();
+    if matches!(value, "current" | "latest") || is_semver_like(value) {
+        return Ok(value.to_string());
+    }
+    Err(format!(
+        "version must be current, latest, or an explicit semver like 0.4.0; got '{v}'"
+    ))
+}
+
+fn is_semver_like(value: &str) -> bool {
+    let core = value.split_once('-').map_or(value, |(core, _)| core);
+    let parts = core.split('.').collect::<Vec<_>>();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn parse_tcp_port(v: &str) -> Result<u16, String> {
+    let port = v
+        .parse::<u16>()
+        .map_err(|_| format!("invalid TCP port: {v}"))?;
+    if port == 0 {
+        return Err("TCP port must be between 1 and 65535".to_string());
+    }
+    Ok(port)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ProxyMode {
     System,
@@ -181,6 +210,96 @@ pub enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
+    #[command(name = "app", about = "Manage the official Autofish Android app")]
+    App {
+        #[command(subcommand)]
+        command: AppCommands,
+    },
+    #[command(name = "connect", about = "Configure local connectivity to Autofish")]
+    Connect {
+        #[command(subcommand)]
+        command: ConnectCommands,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum AppCommands {
+    #[command(name = "install", about = "Install the official Autofish App with adb")]
+    Install {
+        #[arg(
+            long,
+            env = "ANDROID_SERIAL",
+            value_name = "ADB_SERIAL",
+            help = "ADB device serial."
+        )]
+        device: Option<String>,
+        #[arg(
+            long,
+            value_name = "VERSION",
+            default_value = "current",
+            value_parser = parse_app_install_version,
+            help = "App version: current | latest | semver."
+        )]
+        version: String,
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Allow downgrading to the target version."
+        )]
+        force: bool,
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Show the plan without downloading or installing."
+        )]
+        dry_run: bool,
+    },
+    #[command(
+        name = "uninstall",
+        about = "Uninstall the official Autofish App with adb"
+    )]
+    Uninstall {
+        #[arg(
+            long,
+            env = "ANDROID_SERIAL",
+            value_name = "ADB_SERIAL",
+            help = "ADB device serial."
+        )]
+        device: Option<String>,
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Show the plan without uninstalling."
+        )]
+        dry_run: bool,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum ConnectCommands {
+    #[command(name = "usb", about = "Connect to Autofish over USB")]
+    Usb {
+        #[arg(
+            long,
+            env = "ANDROID_SERIAL",
+            value_name = "ADB_SERIAL",
+            help = "ADB device serial."
+        )]
+        device: Option<String>,
+        #[arg(
+            long = "local-port",
+            value_name = "PORT",
+            value_parser = parse_tcp_port,
+            help = "Preferred local TCP port for adb forward."
+        )]
+        local_port: Option<u16>,
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Print the plan without forwarding or writing config."
+        )]
+        print_only: bool,
+    },
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -247,50 +366,26 @@ pub enum ActCommands {
         )]
         duration: i64,
     },
-    #[command(
-        name = "back",
-        about = "Press Android Back",
-        long_about = "Press Android Back once."
-    )]
+    #[command(name = "back", about = "Press Android Back")]
     Back,
-    #[command(
-        name = "home",
-        about = "Press Android Home",
-        long_about = "Press Android Home once."
-    )]
+    #[command(name = "home", about = "Press Android Home")]
     Home,
-    #[command(
-        name = "text",
-        about = "Input text",
-        long_about = "Input text to the current focused field."
-    )]
+    #[command(name = "text", about = "Input text")]
     Text {
         #[arg(long)]
         text: String,
     },
-    #[command(
-        name = "launch",
-        about = "Launch an app by package name",
-        long_about = "Launch an app by package name."
-    )]
+    #[command(name = "launch", about = "Launch an app by package name")]
     Launch {
         #[arg(long = "package")]
         package_name: String,
     },
-    #[command(
-        name = "stop",
-        about = "Stop an app by package name",
-        long_about = "Stop (force-stop) an app by package name."
-    )]
+    #[command(name = "stop", about = "Stop an app by package name")]
     Stop {
         #[arg(long = "package")]
         package_name: String,
     },
-    #[command(
-        name = "key",
-        about = "Press a key by Android key code",
-        long_about = "Press a key by Android key code."
-    )]
+    #[command(name = "key", about = "Press a key by Android key code")]
     Key {
         #[arg(long = "key-code")]
         key_code: i32,
@@ -386,20 +481,12 @@ pub enum ObserveCommands {
     },
     #[command(name = "top")]
     Top,
-    #[command(
-        name = "refs",
-        about = "Observe server-generated clickable refs with aliases",
-        long_about = "Observe server-generated clickable refs with aliases (`@n1`, `@n2`, ...).\nUse returned ref alias as `act tap --by ref --value <ref>`."
-    )]
+    #[command(name = "refs", about = "Observe clickable refs with aliases")]
     Refs {
         #[arg(long = "max-rows", default_value_t = 120)]
         max_rows: usize,
     },
-    #[command(
-        name = "page",
-        about = "Atomic page observation: top + screen + refs in one call",
-        long_about = "Observe page state atomically. Always returns base metadata; topActivity may be null when a stable value cannot be determined.\nUse --field to select additional data slices (default: screen). All data comes from the same point-in-time capture."
-    )]
+    #[command(name = "page", about = "Observe top + screen + refs")]
     Page {
         #[arg(
             long = "save-dir",
@@ -482,11 +569,7 @@ pub enum VerifyCommands {
         #[arg(long, default_value = "contains")]
         mode: String,
     },
-    #[command(
-        name = "node-exists",
-        about = "Verify a node exists by text/content_desc/resource_id/class_name",
-        long_about = "Verify a node exists by text/content_desc/resource_id/class_name.\n\nAliases: `desc` -> `content_desc`, `class` -> `class_name`.\nIf the screen is WebView-heavy (`hasWebView=true` or `nodeReliability=low`), prefer `verify text-contains` first."
-    )]
+    #[command(name = "node-exists", about = "Verify a node exists")]
     NodeExists {
         #[arg(long)]
         by: String,
@@ -614,6 +697,114 @@ mod tests {
     fn memory_commands_parse_without_url() {
         let cli = Cli::parse_from(["af", "--session", "demo", "memory", "log", "--limit", "5"]);
         assert!(matches!(cli.command, Commands::Memory { .. }));
+    }
+
+    #[test]
+    fn app_command_install_parses_as_local_command() {
+        let cli = Cli::parse_from([
+            "af",
+            "app",
+            "install",
+            "--device",
+            "RFCX123456",
+            "--dry-run",
+        ]);
+        match cli.command {
+            Commands::App {
+                command:
+                    AppCommands::Install {
+                        device,
+                        version,
+                        dry_run,
+                        ..
+                    },
+            } => {
+                assert_eq!(device.as_deref(), Some("RFCX123456"));
+                assert_eq!(version, "current");
+                assert!(dry_run);
+            }
+            _ => panic!("expected app install command"),
+        }
+    }
+
+    #[test]
+    fn app_command_uninstall_parses_as_local_command() {
+        let cli = Cli::parse_from([
+            "af",
+            "app",
+            "uninstall",
+            "--device",
+            "RFCX123456",
+            "--dry-run",
+        ]);
+        match cli.command {
+            Commands::App {
+                command: AppCommands::Uninstall { device, dry_run },
+            } => {
+                assert_eq!(device.as_deref(), Some("RFCX123456"));
+                assert!(dry_run);
+            }
+            _ => panic!("expected app uninstall command"),
+        }
+    }
+
+    #[test]
+    fn app_install_accepts_latest_and_semver_versions() {
+        for version in ["latest", "0.4.0", "0.4.0-rc.1"] {
+            let cli = Cli::parse_from(["af", "app", "install", "--version", version, "--dry-run"]);
+            match cli.command {
+                Commands::App {
+                    command:
+                        AppCommands::Install {
+                            version: parsed, ..
+                        },
+                } => assert_eq!(parsed, version),
+                _ => panic!("expected app install command"),
+            }
+        }
+    }
+
+    #[test]
+    fn app_install_rejects_invalid_version() {
+        let err = Cli::try_parse_from(["af", "app", "install", "--version", "banana"])
+            .expect_err("invalid version should fail");
+        assert!(err.to_string().contains("version must be current"));
+    }
+
+    #[test]
+    fn connect_usb_parses_as_local_command() {
+        let cli = Cli::parse_from([
+            "af",
+            "connect",
+            "usb",
+            "--device",
+            "RFCX123456",
+            "--local-port",
+            "18081",
+            "--print-only",
+        ]);
+        match cli.command {
+            Commands::Connect {
+                command:
+                    ConnectCommands::Usb {
+                        device,
+                        local_port,
+                        print_only,
+                    },
+            } => {
+                assert_eq!(device.as_deref(), Some("RFCX123456"));
+                assert_eq!(local_port, Some(18081));
+                assert!(print_only);
+            }
+            _ => panic!("expected connect usb command"),
+        }
+    }
+
+    #[test]
+    fn connect_usb_rejects_zero_local_port() {
+        let err = Cli::try_parse_from(["af", "connect", "usb", "--local-port", "0"])
+            .expect_err("port 0 should fail");
+        assert!(err.to_string().contains("TCP port must be between"));
     }
 
     #[test]

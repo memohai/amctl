@@ -2,13 +2,16 @@ use crate::api::request::ApiClient;
 use crate::artifact::ArtifactManager;
 use crate::builder::ReqClientBuilder;
 use crate::cli::{
-    ActCommands, Cli, Commands, ConfigCommands, MemoryCommands, ObserveCommands, OverlayCommands,
-    RecoverCommands, VerifyCommands,
+    ActCommands, AppCommands, Cli, Commands, ConfigCommands, ConnectCommands, MemoryCommands,
+    ObserveCommands, OverlayCommands, RecoverCommands, VerifyCommands,
 };
 use crate::commands::observe::ScreenshotOptions;
-use crate::commands::{act, common::OverlaySetOptions, memory, observe, recover, verify};
+use crate::commands::{
+    act, app, common::OverlaySetOptions, connect, memory, observe, recover, verify,
+};
 use crate::config::{
-    ResolvedSettings, config_value_for_output, get_entry, list_entries_map, set_key, unset_key,
+    ConfigSource, ResolvedSettings, config_value_for_output, get_entry, list_entries_map, set_key,
+    unset_key,
 };
 use crate::memory::MemoryStore;
 use crate::memory_recording::{
@@ -49,7 +52,7 @@ pub fn run_command(
             &runtime.invocation_id,
             "health",
             "health",
-            observe_health(&api),
+            observe_health(&api, settings),
         ),
         Commands::Act { command, .. } => match command {
             ActCommands::Tap {
@@ -248,6 +251,8 @@ pub fn run_command(
             ),
         },
         Commands::Memory { .. } => unreachable!("memory commands are handled locally"),
+        Commands::App { .. } => unreachable!("app commands are handled locally"),
+        Commands::Connect { .. } => unreachable!("connect commands are handled locally"),
         Commands::Recover { command, .. } => match command {
             RecoverCommands::Back { times } => into_output(
                 &runtime.invocation_id,
@@ -269,6 +274,64 @@ pub fn run_command(
             ),
         },
         Commands::Config { .. } => unreachable!("config commands are handled locally"),
+    }
+}
+
+pub fn run_app_command(invocation_id: &str, cli: &Cli) -> Value {
+    match &cli.command {
+        Commands::App { command } => match command {
+            AppCommands::Install {
+                device,
+                version,
+                force,
+                dry_run,
+            } => into_output(
+                invocation_id,
+                "app",
+                "install",
+                app::handle_install(app::InstallOptions {
+                    device: device.as_deref(),
+                    version,
+                    force: *force,
+                    dry_run: *dry_run,
+                }),
+            ),
+            AppCommands::Uninstall { device, dry_run } => into_output(
+                invocation_id,
+                "app",
+                "uninstall",
+                app::handle_uninstall(app::UninstallOptions {
+                    device: device.as_deref(),
+                    dry_run: *dry_run,
+                }),
+            ),
+        },
+        _ => unreachable!("run_app_command only handles app commands"),
+    }
+}
+
+pub fn run_connect_command(invocation_id: &str, cli: &Cli, settings: &ResolvedSettings) -> Value {
+    match &cli.command {
+        Commands::Connect { command } => match command {
+            ConnectCommands::Usb {
+                device,
+                local_port,
+                print_only,
+            } => into_output(
+                invocation_id,
+                "connect",
+                "usb",
+                connect::handle_usb_connect(
+                    settings,
+                    connect::UsbConnectOptions {
+                        device: device.as_deref(),
+                        local_port: *local_port,
+                        print_only: *print_only,
+                    },
+                ),
+            ),
+        },
+        _ => unreachable!("run_connect_command only handles connect commands"),
     }
 }
 
@@ -445,9 +508,52 @@ pub fn persist_memory(
     }
 }
 
-fn observe_health(api: &ApiClient<'_>) -> crate::output::CommandResult {
+fn observe_health(
+    api: &ApiClient<'_>,
+    settings: &ResolvedSettings,
+) -> crate::output::CommandResult {
     let health = api.health().map_err(crate::output::CommandError::from)?;
-    Ok(serde_json::json!({"health": health.payload}))
+    Ok(serde_json::json!({
+        "health": health.payload,
+        "connection": connection_metadata(settings)
+    }))
+}
+
+fn connection_metadata(settings: &ResolvedSettings) -> Value {
+    if settings.remote_url_source != Some(ConfigSource::File)
+        || !is_configured_usb_forward_url(settings)
+    {
+        return serde_json::json!({
+            "url": settings.remote_url.as_deref(),
+            "transport": "unknown",
+            "device": null,
+            "localPort": null,
+            "devicePort": null,
+        });
+    }
+
+    serde_json::json!({
+        "url": settings.remote_url.as_deref(),
+        "transport": settings.connection_transport.as_deref().unwrap_or("unknown"),
+        "device": settings.connection_usb_device.as_deref(),
+        "localPort": settings.connection_usb_local_port,
+        "devicePort": settings.connection_usb_device_port,
+    })
+}
+
+fn is_configured_usb_forward_url(settings: &ResolvedSettings) -> bool {
+    let Some("usb-forward") = settings.connection_transport.as_deref() else {
+        return false;
+    };
+    let (Some(remote_url), Some(local_port)) = (
+        settings.remote_url.as_deref(),
+        settings.connection_usb_local_port,
+    ) else {
+        return false;
+    };
+    let remote_url = remote_url.trim_end_matches('/');
+    remote_url == format!("http://127.0.0.1:{local_port}")
+        || remote_url == format!("http://localhost:{local_port}")
 }
 
 #[cfg(test)]
@@ -457,6 +563,88 @@ mod tests {
     use crate::memory::PageContext;
     use clap::Parser;
     use serde_json::json;
+    use std::path::PathBuf;
+
+    fn base_settings() -> ResolvedSettings {
+        ResolvedSettings {
+            config_path: PathBuf::from("/tmp/af-runner-test.toml"),
+            output: crate::cli::OutputFormat::Text,
+            output_source: ConfigSource::Default,
+            memory_db: PathBuf::from("af.db"),
+            memory_db_source: ConfigSource::Default,
+            remote_url: Some("http://127.0.0.1:18081".into()),
+            remote_url_source: Some(ConfigSource::File),
+            remote_token: None,
+            remote_token_source: None,
+            connection_transport: Some("usb-forward".into()),
+            connection_transport_source: Some(ConfigSource::File),
+            connection_usb_device: Some("RFCX123456".into()),
+            connection_usb_device_source: Some(ConfigSource::File),
+            connection_usb_local_port: Some(18081),
+            connection_usb_local_port_source: Some(ConfigSource::File),
+            connection_usb_device_port: Some(8081),
+            connection_usb_device_port_source: Some(ConfigSource::File),
+            artifact_dir: PathBuf::from("/tmp/artifacts"),
+            artifact_dir_source: ConfigSource::Default,
+            screen_file: None,
+            screen_file_source: None,
+            screenshot_file: None,
+            screenshot_file_source: None,
+            page_dir: PathBuf::from("/tmp/artifacts/page"),
+            page_dir_source: ConfigSource::Default,
+        }
+    }
+
+    #[test]
+    fn health_connection_metadata_includes_configured_transport_for_config_url() {
+        let settings = base_settings();
+
+        assert_eq!(
+            connection_metadata(&settings),
+            json!({
+                "url": "http://127.0.0.1:18081",
+                "transport": "usb-forward",
+                "device": "RFCX123456",
+                "localPort": 18081,
+                "devicePort": 8081,
+            })
+        );
+    }
+
+    #[test]
+    fn health_connection_metadata_ignores_stale_transport_for_cli_url() {
+        let mut settings = base_settings();
+        settings.remote_url = Some("http://192.0.2.10:8081".into());
+        settings.remote_url_source = Some(ConfigSource::Cli);
+
+        assert_eq!(
+            connection_metadata(&settings),
+            json!({
+                "url": "http://192.0.2.10:8081",
+                "transport": "unknown",
+                "device": null,
+                "localPort": null,
+                "devicePort": null,
+            })
+        );
+    }
+
+    #[test]
+    fn health_connection_metadata_ignores_stale_usb_transport_for_file_lan_url() {
+        let mut settings = base_settings();
+        settings.remote_url = Some("http://192.0.2.10:8081".into());
+
+        assert_eq!(
+            connection_metadata(&settings),
+            json!({
+                "url": "http://192.0.2.10:8081",
+                "transport": "unknown",
+                "device": null,
+                "localPort": null,
+                "devicePort": null,
+            })
+        );
+    }
 
     #[test]
     fn persist_memory_records_event_for_act() {

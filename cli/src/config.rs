@@ -23,6 +23,8 @@ pub struct FileConfig {
     #[serde(default)]
     pub remote: RemoteSection,
     #[serde(default)]
+    pub connection: ConnectionSection,
+    #[serde(default)]
     pub memory: MemorySection,
     #[serde(default)]
     pub artifacts: ArtifactSection,
@@ -40,6 +42,20 @@ pub struct RemoteSection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ConnectionSection {
+    pub transport: Option<String>,
+    #[serde(default)]
+    pub usb: UsbConnectionSection,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UsbConnectionSection {
+    pub device: Option<String>,
+    pub local_port: Option<u16>,
+    pub device_port: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MemorySection {
     pub db: Option<String>,
 }
@@ -52,7 +68,7 @@ pub struct ArtifactSection {
     pub page_dir: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ConfigSource {
     Cli,
@@ -85,6 +101,14 @@ pub struct ResolvedSettings {
     pub remote_url_source: Option<ConfigSource>,
     pub remote_token: Option<String>,
     pub remote_token_source: Option<ConfigSource>,
+    pub connection_transport: Option<String>,
+    pub connection_transport_source: Option<ConfigSource>,
+    pub connection_usb_device: Option<String>,
+    pub connection_usb_device_source: Option<ConfigSource>,
+    pub connection_usb_local_port: Option<u16>,
+    pub connection_usb_local_port_source: Option<ConfigSource>,
+    pub connection_usb_device_port: Option<u16>,
+    pub connection_usb_device_port_source: Option<ConfigSource>,
     pub artifact_dir: PathBuf,
     pub artifact_dir_source: ConfigSource,
     pub screen_file: Option<PathBuf>,
@@ -215,6 +239,14 @@ pub fn resolve_settings(cli: &Cli) -> anyhow::Result<ResolvedSettings> {
             )
         }
     };
+    let (connection_transport, connection_transport_source) =
+        resolve_optional_string(None, None, file_config.connection.transport.clone());
+    let (connection_usb_device, connection_usb_device_source) =
+        resolve_optional_string(None, None, file_config.connection.usb.device.clone());
+    let (connection_usb_local_port, connection_usb_local_port_source) =
+        resolve_optional_u16(None, file_config.connection.usb.local_port);
+    let (connection_usb_device_port, connection_usb_device_port_source) =
+        resolve_optional_u16(None, file_config.connection.usb.device_port);
 
     Ok(ResolvedSettings {
         config_path,
@@ -226,6 +258,14 @@ pub fn resolve_settings(cli: &Cli) -> anyhow::Result<ResolvedSettings> {
         remote_url_source,
         remote_token,
         remote_token_source,
+        connection_transport,
+        connection_transport_source,
+        connection_usb_device,
+        connection_usb_device_source,
+        connection_usb_local_port,
+        connection_usb_local_port_source,
+        connection_usb_device_port,
+        connection_usb_device_port_source,
         artifact_dir,
         artifact_dir_source,
         screen_file,
@@ -309,6 +349,19 @@ fn resolve_optional_string(
     (None, None)
 }
 
+fn resolve_optional_u16(
+    cli_value: Option<u16>,
+    file_value: Option<u16>,
+) -> (Option<u16>, Option<ConfigSource>) {
+    if let Some(value) = cli_value {
+        return (Some(value), Some(ConfigSource::Cli));
+    }
+    if let Some(value) = file_value {
+        return (Some(value), Some(ConfigSource::File));
+    }
+    (None, None)
+}
+
 pub fn require_url(settings: &ResolvedSettings) -> anyhow::Result<&str> {
     settings
         .remote_url
@@ -373,6 +426,22 @@ fn effective_value(
             settings.remote_token.as_deref(),
             settings.remote_token_source,
         ),
+        "connection.transport" => effective_optional_string(
+            settings.connection_transport.as_deref(),
+            settings.connection_transport_source,
+        ),
+        "connection.usb.device" => effective_optional_string(
+            settings.connection_usb_device.as_deref(),
+            settings.connection_usb_device_source,
+        ),
+        "connection.usb.local_port" => effective_optional_u16(
+            settings.connection_usb_local_port,
+            settings.connection_usb_local_port_source,
+        ),
+        "connection.usb.device_port" => effective_optional_u16(
+            settings.connection_usb_device_port,
+            settings.connection_usb_device_port_source,
+        ),
         "memory.db" => Some((
             serde_json::Value::String(settings.memory_db.display().to_string()),
             settings.memory_db_source,
@@ -430,6 +499,16 @@ fn effective_optional_path(
     })
 }
 
+fn effective_optional_u16(
+    value: Option<u16>,
+    source: Option<ConfigSource>,
+) -> Option<(serde_json::Value, ConfigSource)> {
+    Some(match (value, source) {
+        (Some(value), Some(source)) => (serde_json::json!(value), source),
+        _ => (serde_json::Value::Null, ConfigSource::Unset),
+    })
+}
+
 pub fn config_value_for_output(key: &str, value: serde_json::Value) -> serde_json::Value {
     if is_sensitive_key(key) && !value.is_null() {
         serde_json::Value::String("<redacted>".to_string())
@@ -474,6 +553,14 @@ fn apply_set(config: &mut FileConfig, key: &str, value: &str) -> anyhow::Result<
         }
         "remote.url" => config.remote.url = Some(value.to_string()),
         "remote.token" => config.remote.token = Some(value.to_string()),
+        "connection.transport" => config.connection.transport = Some(value.to_string()),
+        "connection.usb.device" => config.connection.usb.device = Some(value.to_string()),
+        "connection.usb.local_port" => {
+            config.connection.usb.local_port = Some(parse_port_config(value)?)
+        }
+        "connection.usb.device_port" => {
+            config.connection.usb.device_port = Some(parse_port_config(value)?)
+        }
         "memory.db" => config.memory.db = Some(value.to_string()),
         "artifacts.dir" => config.artifacts.dir = Some(value.to_string()),
         "artifacts.screen_file" => config.artifacts.screen_file = Some(value.to_string()),
@@ -484,11 +571,25 @@ fn apply_set(config: &mut FileConfig, key: &str, value: &str) -> anyhow::Result<
     Ok(())
 }
 
+fn parse_port_config(value: &str) -> anyhow::Result<u16> {
+    let port = value
+        .parse::<u16>()
+        .with_context(|| format!("invalid port value '{value}'"))?;
+    if port == 0 {
+        bail!("port must be between 1 and 65535");
+    }
+    Ok(port)
+}
+
 fn apply_unset(config: &mut FileConfig, key: &str) {
     match key {
         "output.default" => config.output.default = None,
         "remote.url" => config.remote.url = None,
         "remote.token" => config.remote.token = None,
+        "connection.transport" => config.connection.transport = None,
+        "connection.usb.device" => config.connection.usb.device = None,
+        "connection.usb.local_port" => config.connection.usb.local_port = None,
+        "connection.usb.device_port" => config.connection.usb.device_port = None,
         "memory.db" => config.memory.db = None,
         "artifacts.dir" => config.artifacts.dir = None,
         "artifacts.screen_file" => config.artifacts.screen_file = None,
@@ -511,6 +612,10 @@ pub fn known_keys() -> Vec<&'static str> {
         "output.default",
         "remote.url",
         "remote.token",
+        "connection.transport",
+        "connection.usb.device",
+        "connection.usb.local_port",
+        "connection.usb.device_port",
         "memory.db",
         "artifacts.dir",
         "artifacts.screen_file",
@@ -555,6 +660,14 @@ mod tests {
             remote_url_source: None,
             remote_token: None,
             remote_token_source: None,
+            connection_transport: None,
+            connection_transport_source: None,
+            connection_usb_device: None,
+            connection_usb_device_source: None,
+            connection_usb_local_port: None,
+            connection_usb_local_port_source: None,
+            connection_usb_device_port: None,
+            connection_usb_device_port_source: None,
             artifact_dir: PathBuf::from("/tmp/artifacts"),
             artifact_dir_source: ConfigSource::Default,
             screen_file: None,
@@ -636,5 +749,37 @@ mod tests {
 
         assert_eq!(entry.source, "env");
         assert_eq!(entry.value, json!("<redacted>"));
+    }
+
+    #[test]
+    fn connection_metadata_keys_are_known() {
+        let mut settings = base_settings();
+        settings.connection_transport = Some("usb-forward".into());
+        settings.connection_transport_source = Some(ConfigSource::File);
+        settings.connection_usb_device = Some("RFCX123456".into());
+        settings.connection_usb_device_source = Some(ConfigSource::File);
+        settings.connection_usb_local_port = Some(18081);
+        settings.connection_usb_local_port_source = Some(ConfigSource::File);
+        settings.connection_usb_device_port = Some(8081);
+        settings.connection_usb_device_port_source = Some(ConfigSource::File);
+
+        let entries = list_entries_map(&settings);
+
+        assert_eq!(
+            entries.get("connection.transport"),
+            Some(&json!({"source": "file", "value": "usb-forward"}))
+        );
+        assert_eq!(
+            entries.get("connection.usb.device"),
+            Some(&json!({"source": "file", "value": "RFCX123456"}))
+        );
+        assert_eq!(
+            entries.get("connection.usb.local_port"),
+            Some(&json!({"source": "file", "value": 18081}))
+        );
+        assert_eq!(
+            entries.get("connection.usb.device_port"),
+            Some(&json!({"source": "file", "value": 8081}))
+        );
     }
 }

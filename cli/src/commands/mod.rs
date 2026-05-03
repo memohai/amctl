@@ -1,5 +1,8 @@
 pub mod act;
+pub mod adb;
+pub mod app;
 pub mod common;
+pub mod connect;
 pub mod memory;
 pub mod observe;
 pub mod recover;
