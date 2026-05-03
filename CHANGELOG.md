@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0-rc.1] - 2026-05-03
+
+Range: `app-v0.4.0` / `cli-v0.4.0` .. `app-v0.5.0-rc.1` / `cli-v0.5.0-rc.1`
+
 ### Added
 - Add local `af app install` and `af app uninstall` for managing the official Autofish App over adb.
 - Add a home page connection card for copying agent-ready `af config` commands and raw connection info from the Android app.
