@@ -36,7 +36,13 @@
     <string name="accessibility_service">无障碍服务</string>
     <string name="open_accessibility_settings">打开无障碍设置</string>
     <string name="connection_info">连接信息</string>
+    <string name="connection_info_desc">复制这些信息来配置 af，或直接粘贴给 agent 使用。</string>
+    <string name="connection_service_stopped_hint">服务未启动。请先打开 Service，再从 af 连接。</string>
+    <string name="connection_ip_unknown_hint">设备 IP 未知。复制配置前请检查网络连接。</string>
+    <string name="connection_token_missing_hint">令牌未生成。请到服务设置中重新生成。</string>
     <string name="unknown">未知</string>
+    <string name="ip_label">IP</string>
+    <string name="url_label">URL</string>
     <string name="device_ip_format">设备 IP：%1$s</string>
     <string name="service_addr_format">服务地址：http://%1$s:%2$d</string>
     <string name="service_info_format">Service：端口 %1$d，令牌 %2$s...</string>
@@ -71,5 +77,9 @@
     <string name="token_label">令牌</string>
     <string name="not_generated">未生成</string>
     <string name="copy_token">复制令牌</string>
+    <string name="copy_agent_config">复制 af 配置命令</string>
+    <string name="copy_raw_connection_info">复制原始连接信息</string>
+    <string name="copy_lan_url_comment">LAN URL 需要开发机或 agent 与这台 Android 设备处于同一局域网。</string>
+    <string name="copied_to_clipboard">已复制到剪贴板</string>
     <string name="regenerate_token">重新生成令牌</string>
 </resources>

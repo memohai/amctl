@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
+import com.memohai.autofish.data.model.ServerConfig
 import com.memohai.autofish.data.model.ServerStatus
 import com.memohai.autofish.data.repository.SettingsRepository
 import com.memohai.autofish.service.ServiceServer
@@ -28,16 +29,30 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class ServiceServerService : Service() {
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
-    @Inject lateinit var settingsRepository: SettingsRepository
-    @Inject lateinit var accessibilityServiceProvider: AccessibilityServiceProvider
-    @Inject lateinit var treeParser: AccessibilityTreeParser
-    @Inject lateinit var compactTreeFormatter: CompactTreeFormatter
-    @Inject lateinit var elementFinder: ElementFinder
-    @Inject lateinit var toolRouter: ToolRouter
+    @Inject
+    lateinit var accessibilityServiceProvider: AccessibilityServiceProvider
+
+    @Inject
+    lateinit var treeParser: AccessibilityTreeParser
+
+    @Inject
+    lateinit var compactTreeFormatter: CompactTreeFormatter
+
+    @Inject
+    lateinit var elementFinder: ElementFinder
+
+    @Inject
+    lateinit var toolRouter: ToolRouter
+
+    @Inject
+    lateinit var connectionHintWriter: ConnectionHintWriter
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var serviceServer: ServiceServer? = null
+    private var lastServicePort: Int = ServerConfig.DEFAULT_PORT
 
     companion object {
         private const val TAG = "autofish:Service"
@@ -48,7 +63,8 @@ class ServiceServerService : Service() {
 
         private val _serverStatus = MutableStateFlow<ServerStatus>(ServerStatus.Stopped)
         val serverStatus: StateFlow<ServerStatus> = _serverStatus
-        @Volatile private var runningInstance: ServiceServerService? = null
+        @Volatile
+        private var runningInstance: ServiceServerService? = null
 
         fun setOverlayVisible(visible: Boolean) {
             runningInstance?.setOverlayVisibleInternal(visible)
@@ -62,13 +78,16 @@ class ServiceServerService : Service() {
             runningInstance?.setRefVisibleInternal(visible)
         }
 
-        fun getRefPanelState(limit: Int = 120): ServiceServer.RefPanelStatePayload? =
-            runningInstance?.getRefPanelStateInternal(limit)
+        fun getRefPanelState(limit: Int = 120): ServiceServer.RefPanelStatePayload? = runningInstance?.getRefPanelStateInternal(limit)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         runningInstance = this
         when (intent?.action) {
             ACTION_STOP -> stopServer()
@@ -87,20 +106,26 @@ class ServiceServerService : Service() {
         serviceScope.launch {
             try {
                 val config = settingsRepository.getServerConfig()
-                val server = ServiceServer(
-                    port = config.servicePort,
-                    bindAddress = config.bindingAddress.address,
-                    bearerToken = config.serviceBearerToken,
-                    toolRouter = toolRouter,
-                    accessibilityProvider = accessibilityServiceProvider,
-                    treeParser = treeParser,
-                    compactTreeFormatter = compactTreeFormatter,
-                    elementFinder = elementFinder,
-                )
+                lastServicePort = config.servicePort
+                val server =
+                    ServiceServer(
+                        port = config.servicePort,
+                        bindAddress = config.bindingAddress.address,
+                        bearerToken = config.serviceBearerToken,
+                        toolRouter = toolRouter,
+                        accessibilityProvider = accessibilityServiceProvider,
+                        treeParser = treeParser,
+                        compactTreeFormatter = compactTreeFormatter,
+                        elementFinder = elementFinder,
+                    )
                 server.start()
                 serviceServer = server
                 server.setOverlayVisible(config.serviceOverlayVisible)
                 server.setRefVisible(config.serviceRefVisible)
+                connectionHintWriter.write(
+                    servicePort = config.servicePort,
+                    serviceRunning = true,
+                )
                 _serverStatus.value = ServerStatus.Running(config.servicePort, config.bindingAddress.address)
                 Log.i(TAG, "Service server started on ${config.bindingAddress.address}:${config.servicePort}")
                 ServiceLogBus.info("SERVICE", "Started on ${config.bindingAddress.address}:${config.servicePort}")
@@ -123,6 +148,14 @@ class ServiceServerService : Service() {
                     ServiceLogBus.error("SERVICE", "Stop failed: ${e.message ?: "Unknown error"}")
                 }
             serviceServer = null
+            val config = runCatching { settingsRepository.getServerConfig() }.getOrNull()
+            if (config != null) {
+                lastServicePort = config.servicePort
+            }
+            connectionHintWriter.write(
+                servicePort = config?.servicePort ?: lastServicePort,
+                serviceRunning = false,
+            )
             _serverStatus.value = ServerStatus.Stopped
             ServiceLogBus.info("SERVICE", "Stopped")
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -133,6 +166,7 @@ class ServiceServerService : Service() {
     override fun onDestroy() {
         serviceServer?.stop()
         serviceServer = null
+        connectionHintWriter.write(servicePort = lastServicePort, serviceRunning = false)
         runningInstance = null
         _serverStatus.value = ServerStatus.Stopped
         serviceScope.cancel()
@@ -172,13 +206,14 @@ class ServiceServerService : Service() {
             .getOrNull()
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(com.memohai.autofish.R.string.service_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = getString(com.memohai.autofish.R.string.service_channel_desc)
-        }
+        val channel =
+            NotificationChannel(
+                CHANNEL_ID,
+                getString(com.memohai.autofish.R.string.service_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = getString(com.memohai.autofish.R.string.service_channel_desc)
+            }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 

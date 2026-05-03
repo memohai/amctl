@@ -6,10 +6,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.memohai.autofish.data.model.BindingAddress
 import com.memohai.autofish.data.model.AppLanguage
 import com.memohai.autofish.data.model.AppThemeMode
+import com.memohai.autofish.data.model.BindingAddress
 import com.memohai.autofish.data.model.ServerConfig
+import com.memohai.autofish.services.service.ConnectionHintWriter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -20,6 +21,7 @@ class SettingsRepositoryImpl
     @Inject
     constructor(
         private val dataStore: DataStore<Preferences>,
+        private val connectionHintWriter: ConnectionHintWriter,
     ) : SettingsRepository {
         override val serverConfig: Flow<ServerConfig> =
             dataStore.data.map { prefs -> mapPreferencesToServerConfig(prefs) }
@@ -44,6 +46,7 @@ class SettingsRepositoryImpl
 
         override suspend fun updateServicePort(port: Int) {
             dataStore.edit { it[SERVICE_PORT_KEY] = port }
+            connectionHintWriter.write(servicePort = port, serviceRunning = false)
         }
 
         override suspend fun updateServiceBearerToken(token: String) {
@@ -89,7 +92,8 @@ class SettingsRepositoryImpl
             val appThemeModeName = prefs[APP_THEME_MODE_KEY] ?: AppThemeMode.LIGHT.name
             return ServerConfig(
                 bindingAddress =
-                    BindingAddress.entries.firstOrNull { it.name == bindingAddressName }
+                    BindingAddress.entries
+                        .firstOrNull { it.name == bindingAddressName }
                         ?.takeUnless { it == BindingAddress.LOCALHOST }
                         ?: BindingAddress.ALL_INTERFACES,
                 autoStartOnBoot = prefs[AUTO_START_KEY] ?: false,

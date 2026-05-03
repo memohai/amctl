@@ -95,6 +95,7 @@ import com.memohai.autofish.data.model.AppThemeMode
 import com.memohai.autofish.data.model.ServerStatus
 import com.memohai.autofish.services.logging.ServiceLogBus
 import com.memohai.autofish.services.logging.ServiceLogEntry
+import com.memohai.autofish.ui.components.ConnectionInfoCard
 import com.memohai.autofish.ui.components.ServiceConfigurationSection
 import com.memohai.autofish.ui.components.ServerStatusCard
 import com.memohai.autofish.ui.viewmodels.MainViewModel
@@ -333,35 +334,12 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                             if (enabled) viewModel.startServiceServer() else viewModel.stopServiceServer()
                         },
                     )
-                    if (isServiceRunning) {
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.connection_info),
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                                Text(
-                                    text = stringResource(
-                                        R.string.device_ip_format,
-                                        deviceIp ?: stringResource(R.string.unknown),
-                                    ),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(
-                                        R.string.service_addr_format,
-                                        deviceIp ?: stringResource(R.string.unknown),
-                                        serverConfig.servicePort,
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
+                    ConnectionInfoCard(
+                        deviceIp = deviceIp,
+                        servicePort = serverConfig.servicePort,
+                        serviceBearerToken = serverConfig.serviceBearerToken,
+                        isServiceRunning = isServiceRunning,
+                    )
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {

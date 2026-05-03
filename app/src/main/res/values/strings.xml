@@ -36,7 +36,13 @@
     <string name="accessibility_service">Accessibility Service</string>
     <string name="open_accessibility_settings">Open Accessibility Settings</string>
     <string name="connection_info">Connection Info</string>
+    <string name="connection_info_desc">Copy these values to configure af or share them with an agent.</string>
+    <string name="connection_service_stopped_hint">Service is stopped. Start Service before connecting from af.</string>
+    <string name="connection_ip_unknown_hint">Device IP is unknown. Check network connectivity before copying config.</string>
+    <string name="connection_token_missing_hint">Token is not generated. Open Service settings to regenerate it.</string>
     <string name="unknown">Unknown</string>
+    <string name="ip_label">IP</string>
+    <string name="url_label">URL</string>
     <string name="device_ip_format">Device IP: %1$s</string>
     <string name="service_addr_format">Service: http://%1$s:%2$d</string>
     <string name="service_info_format">Service: port %1$d, token %2$s...</string>
@@ -71,5 +77,9 @@
     <string name="token_label">Token</string>
     <string name="not_generated">Not generated</string>
     <string name="copy_token">Copy token</string>
+    <string name="copy_agent_config">Copy af config commands</string>
+    <string name="copy_raw_connection_info">Copy raw connection info</string>
+    <string name="copy_lan_url_comment">LAN URL requires the computer or agent and this Android device to be on the same local network.</string>
+    <string name="copied_to_clipboard">Copied to clipboard</string>
     <string name="regenerate_token">Regenerate token</string>
 </resources>
