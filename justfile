@@ -4,6 +4,7 @@ set dotenv-load := true
 
 ANDROID_HOME := env("ANDROID_HOME", "~/Android/Sdk")
 GRADLE := "./gradlew"
+GRADLE_FLAGS := env("GRADLE_FLAGS", "")
 ADB_DEVICE := env("ADB_DEVICE", "")
 ADB := if ADB_DEVICE != "" { "adb -s " + ADB_DEVICE } else { "adb" }
 SHIZUKU_VERSION := "13.6.0"
@@ -29,25 +30,33 @@ default:
 
 # Build debug APK
 build:
-    {{ GRADLE }} assembleDebug
+    {{ GRADLE }} {{ GRADLE_FLAGS }} assembleDebug
+
+# Build debug APK without keeping Gradle daemon alive
+build-once:
+    {{ GRADLE }} --no-daemon assembleDebug
 
 # Build release APK
 build-release:
-    {{ GRADLE }} assembleRelease
+    {{ GRADLE }} {{ GRADLE_FLAGS }} assembleRelease
 
 # Clean build artifacts
 clean:
-    {{ GRADLE }} clean
+    {{ GRADLE }} {{ GRADLE_FLAGS }} clean
+
+# Stop Gradle daemons
+gradle-stop:
+    {{ GRADLE }} --stop
 
 # ─── Testing ─────────────────────────────────────────────────────────────────
 
 # Run unit tests
 test:
-    {{ GRADLE }} :app:test
+    {{ GRADLE }} {{ GRADLE_FLAGS }} :app:test
 
 # Run integration tests only
 test-integration:
-    {{ GRADLE }} :app:testDebugUnitTest --tests "com.memohai.autofish.integration.*"
+    {{ GRADLE }} {{ GRADLE_FLAGS }} :app:testDebugUnitTest --tests "com.memohai.autofish.integration.*"
 
 # Run cargo check for the CLI crate
 cli-check:
@@ -79,21 +88,21 @@ cli-quality: cli-check cli-test cli-lint
 
 # Run all linters (ktlint + detekt)
 lint:
-    {{ GRADLE }} ktlintCheck detekt
+    {{ GRADLE }} {{ GRADLE_FLAGS }} ktlintCheck detekt
 
 # Auto-fix linting issues
 lint-fix:
-    {{ GRADLE }} ktlintFormat
+    {{ GRADLE }} {{ GRADLE_FLAGS }} ktlintFormat
 
 # ─── Device Management ──────────────────────────────────────────────────────
 
 # Install debug APK on connected device/emulator
 install: build
-    {{ GRADLE }} installDebug
+    {{ GRADLE }} {{ GRADLE_FLAGS }} installDebug
 
 # Install release APK
 install-release: build-release
-    {{ GRADLE }} installRelease
+    {{ GRADLE }} {{ GRADLE_FLAGS }} installRelease
 
 # Uninstall app from device
 uninstall:
