@@ -5,6 +5,7 @@ use crate::cli::{
     ActCommands, AppCommands, Cli, Commands, ConfigCommands, ConnectCommands, MemoryCommands,
     ObserveCommands, OverlayCommands, RecoverCommands, VerifyCommands,
 };
+use crate::command_outcome::{CommandOutcome, ObservationUpdate};
 use crate::commands::observe::ScreenshotOptions;
 use crate::commands::{
     act, app, common::OverlaySetOptions, connect, memory, observe, recover, verify,
@@ -14,22 +15,19 @@ use crate::config::{
     unset_key,
 };
 use crate::memory::MemoryStore;
-use crate::memory_recording::{
-    record_event_and_close, should_record_event, should_update_session_cache, update_session_cache,
-};
-use crate::output::into_output;
+use crate::output::{CommandResult, into_output};
 use crossbeam_channel::Receiver;
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-pub fn run_command(
+pub fn run_command_outcome(
     client: &Client,
     runtime: &ReqClientBuilder,
     ctrl_c_events: &Receiver<()>,
     cli: &Cli,
     settings: &ResolvedSettings,
     memory_store: Option<&MemoryStore>,
-) -> Value {
+) -> CommandOutcome {
     let api = ApiClient::new(
         client,
         runtime.base_url.as_str(),
@@ -48,20 +46,16 @@ pub fn run_command(
     let command = &cli.command;
 
     match command {
-        Commands::Health { .. } => into_output(
-            &runtime.invocation_id,
-            "health",
-            "health",
-            observe_health(&api, settings),
-        ),
+        Commands::Health { .. } => {
+            CommandOutcome::new("health", "health", observe_health(&api, settings))
+        }
         Commands::Act { command, .. } => match command {
             ActCommands::Tap {
                 xy,
                 by,
                 value,
                 exact_match,
-            } => into_output(
-                &runtime.invocation_id,
+            } => CommandOutcome::new(
                 "act",
                 "tap",
                 act::handle_tap(
@@ -72,48 +66,25 @@ pub fn run_command(
                     *exact_match,
                 ),
             ),
-            ActCommands::Swipe { from, to, duration } => into_output(
-                &runtime.invocation_id,
+            ActCommands::Swipe { from, to, duration } => CommandOutcome::new(
                 "act",
                 "swipe",
                 act::handle_swipe(&api, from[0], from[1], to[0], to[1], *duration),
             ),
-            ActCommands::Back => into_output(
-                &runtime.invocation_id,
-                "act",
-                "back",
-                act::handle_back(&api),
-            ),
-            ActCommands::Home => into_output(
-                &runtime.invocation_id,
-                "act",
-                "home",
-                act::handle_home(&api),
-            ),
-            ActCommands::Text { text } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "text",
-                act::handle_text(&api, text),
-            ),
-            ActCommands::Launch { package_name } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "launch",
-                act::handle_launch(&api, package_name),
-            ),
-            ActCommands::Stop { package_name } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "stop",
-                act::handle_stop(&api, package_name),
-            ),
-            ActCommands::Key { key_code } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "key",
-                act::handle_key(&api, *key_code),
-            ),
+            ActCommands::Back => CommandOutcome::new("act", "back", act::handle_back(&api)),
+            ActCommands::Home => CommandOutcome::new("act", "home", act::handle_home(&api)),
+            ActCommands::Text { text } => {
+                CommandOutcome::new("act", "text", act::handle_text(&api, text))
+            }
+            ActCommands::Launch { package_name } => {
+                CommandOutcome::new("act", "launch", act::handle_launch(&api, package_name))
+            }
+            ActCommands::Stop { package_name } => {
+                CommandOutcome::new("act", "stop", act::handle_stop(&api, package_name))
+            }
+            ActCommands::Key { key_code } => {
+                CommandOutcome::new("act", "key", act::handle_key(&api, *key_code))
+            }
         },
         Commands::Observe { command, .. } => match command {
             ObserveCommands::Screen {
@@ -121,9 +92,8 @@ pub fn run_command(
                 save_file,
                 max_rows,
                 fields,
-            } => into_output(
-                &runtime.invocation_id,
-                "observe",
+            } => observe_outcome(
+                command,
                 "screen",
                 observe::handle_screen(
                     &api,
@@ -135,12 +105,9 @@ pub fn run_command(
                 ),
             ),
             ObserveCommands::Overlay { command } => match command {
-                OverlayCommands::Get => into_output(
-                    &runtime.invocation_id,
-                    "observe",
-                    "overlay",
-                    observe::handle_overlay_get(&api),
-                ),
+                OverlayCommands::Get => {
+                    CommandOutcome::new("observe", "overlay", observe::handle_overlay_get(&api))
+                }
                 OverlayCommands::Set {
                     enable,
                     disable,
@@ -150,8 +117,7 @@ pub fn run_command(
                     refresh_interval_ms,
                     offset_x,
                     offset_y,
-                } => into_output(
-                    &runtime.invocation_id,
+                } => CommandOutcome::new(
                     "observe",
                     "overlay",
                     observe::handle_overlay_set(
@@ -182,9 +148,8 @@ pub fn run_command(
                 hide_overlay,
                 max_marks,
                 mark_scope,
-            } => into_output(
-                &runtime.invocation_id,
-                "observe",
+            } => observe_outcome(
+                command,
                 "screenshot",
                 observe::handle_screenshot(
                     &api,
@@ -200,25 +165,16 @@ pub fn run_command(
                     },
                 ),
             ),
-            ObserveCommands::Top => into_output(
-                &runtime.invocation_id,
-                "observe",
-                "top",
-                observe::handle_top(&api),
-            ),
-            ObserveCommands::Refs { max_rows } => into_output(
-                &runtime.invocation_id,
-                "observe",
-                "refs",
-                observe::handle_refs(&api, *max_rows),
-            ),
+            ObserveCommands::Top => observe_outcome(command, "top", observe::handle_top(&api)),
+            ObserveCommands::Refs { max_rows } => {
+                observe_outcome(command, "refs", observe::handle_refs(&api, *max_rows))
+            }
             ObserveCommands::Page {
                 save_dir,
                 fields,
                 max_rows,
-            } => into_output(
-                &runtime.invocation_id,
-                "observe",
+            } => observe_outcome(
+                command,
                 "page",
                 observe::handle_page(&api, &artifacts, save_dir.as_deref(), fields, *max_rows),
             ),
@@ -227,14 +183,12 @@ pub fn run_command(
             VerifyCommands::TextContains {
                 text,
                 case_sensitive,
-            } => into_output(
-                &runtime.invocation_id,
+            } => CommandOutcome::new(
                 "verify",
                 "text-contains",
                 verify::handle_text_contains(&api, text, !*case_sensitive),
             ),
-            VerifyCommands::TopActivity { expected, mode } => into_output(
-                &runtime.invocation_id,
+            VerifyCommands::TopActivity { expected, mode } => CommandOutcome::new(
                 "verify",
                 "top-activity",
                 verify::handle_top_activity(&api, expected, mode),
@@ -243,8 +197,7 @@ pub fn run_command(
                 by,
                 value,
                 exact_match,
-            } => into_output(
-                &runtime.invocation_id,
+            } => CommandOutcome::new(
                 "verify",
                 "node-exists",
                 verify::handle_node_exists(&api, by, value, *exact_match),
@@ -254,20 +207,13 @@ pub fn run_command(
         Commands::App { .. } => unreachable!("app commands are handled locally"),
         Commands::Connect { .. } => unreachable!("connect commands are handled locally"),
         Commands::Recover { command, .. } => match command {
-            RecoverCommands::Back { times } => into_output(
-                &runtime.invocation_id,
-                "recover",
-                "back",
-                recover::handle_back(&api, *times),
-            ),
-            RecoverCommands::Home => into_output(
-                &runtime.invocation_id,
-                "recover",
-                "home",
-                recover::handle_home(&api),
-            ),
-            RecoverCommands::Relaunch { package_name } => into_output(
-                &runtime.invocation_id,
+            RecoverCommands::Back { times } => {
+                CommandOutcome::new("recover", "back", recover::handle_back(&api, *times))
+            }
+            RecoverCommands::Home => {
+                CommandOutcome::new("recover", "home", recover::handle_home(&api))
+            }
+            RecoverCommands::Relaunch { package_name } => CommandOutcome::new(
                 "recover",
                 "relaunch",
                 recover::handle_relaunch(&api, package_name),
@@ -428,6 +374,18 @@ pub fn run_memory_command(
     }
 }
 
+fn observe_outcome(
+    command: &ObserveCommands,
+    op: &'static str,
+    result: CommandResult,
+) -> CommandOutcome {
+    let observation = result
+        .as_ref()
+        .ok()
+        .and_then(|data| ObservationUpdate::from_observe_data(command, data));
+    CommandOutcome::new("observe", op, result).with_observation(observation)
+}
+
 pub fn run_config_command(invocation_id: &str, cli: &Cli, settings: &ResolvedSettings) -> Value {
     match &cli.command {
         Commands::Config { command } => match command {
@@ -488,26 +446,6 @@ pub fn run_config_command(invocation_id: &str, cli: &Cli, settings: &ResolvedSet
     }
 }
 
-pub fn persist_memory(
-    memory_store: &Option<MemoryStore>,
-    cli: &Cli,
-    invocation_id: &str,
-    result: &Value,
-    duration_ms: u128,
-) {
-    let Some(store) = memory_store else {
-        return;
-    };
-
-    if should_update_session_cache(&cli.command) {
-        update_session_cache(store, &cli.session, &cli.command, result);
-    }
-
-    if should_record_event(&cli.command) {
-        record_event_and_close(store, cli, invocation_id, result, duration_ms);
-    }
-}
-
 fn observe_health(
     api: &ApiClient<'_>,
     settings: &ResolvedSettings,
@@ -560,7 +498,10 @@ fn is_configured_usb_forward_url(settings: &ResolvedSettings) -> bool {
 mod tests {
     use super::*;
     use crate::cli::Cli;
+    use crate::command_outcome::{ObservationUpdate, RecordingInput};
     use crate::memory::PageContext;
+    use crate::memory_recording::record_after_command;
+    use crate::output::CommandError;
     use clap::Parser;
     use serde_json::json;
     use std::path::PathBuf;
@@ -593,6 +534,43 @@ mod tests {
             page_dir: PathBuf::from("/tmp/artifacts/page"),
             page_dir_source: ConfigSource::Default,
         }
+    }
+
+    fn persist_test_memory(
+        store: &Option<MemoryStore>,
+        cli: &Cli,
+        _invocation_id: &str,
+        result: &Value,
+        duration_ms: u128,
+    ) {
+        let status = result.get("status").and_then(Value::as_str).unwrap_or("ok");
+        let data = result.get("data").cloned().unwrap_or_else(|| json!({}));
+        let command_result = if status == "ok" {
+            Ok(data)
+        } else {
+            Err(CommandError::internal(
+                result
+                    .get("error")
+                    .and_then(|err| err.get("message"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("test error"),
+            ))
+        };
+        let mut outcome = CommandOutcome::new("test", "test", command_result);
+        if let Commands::Observe { command, .. } = &cli.command {
+            let observation = outcome
+                .data()
+                .and_then(|data| ObservationUpdate::from_observe_data(command, data));
+            outcome = outcome.with_observation(observation);
+        }
+        record_after_command(
+            store,
+            RecordingInput {
+                cli,
+                outcome: &outcome,
+                duration_ms,
+            },
+        );
     }
 
     #[test]
@@ -661,7 +639,7 @@ mod tests {
         ]);
         let store = Some(MemoryStore::new_in_memory().expect("init"));
 
-        persist_memory(
+        persist_test_memory(
             &store,
             &cli,
             "invoke-1",
@@ -694,7 +672,7 @@ mod tests {
         ]);
         let store = Some(MemoryStore::new_in_memory().expect("init"));
 
-        persist_memory(
+        persist_test_memory(
             &store,
             &cli,
             "invoke-1",
@@ -727,7 +705,7 @@ mod tests {
         ]);
         let store = Some(MemoryStore::new_in_memory().expect("init"));
 
-        persist_memory(
+        persist_test_memory(
             &store,
             &cli,
             "invoke-1",
@@ -761,7 +739,7 @@ mod tests {
             "demo-token",
             "back",
         ]);
-        persist_memory(
+        persist_test_memory(
             &store,
             &cli,
             "invoke-1",
@@ -809,7 +787,7 @@ mod tests {
             "--value",
             "Wi-Fi",
         ]);
-        persist_memory(
+        persist_test_memory(
             &store,
             &cli_act,
             "inv-1",
@@ -845,7 +823,7 @@ mod tests {
             "--text",
             "Wi-Fi",
         ]);
-        persist_memory(
+        persist_test_memory(
             &store,
             &cli_verify,
             "inv-2",
@@ -893,7 +871,7 @@ mod tests {
             "--value",
             "Wi-Fi",
         ]);
-        persist_memory(
+        persist_test_memory(
             &store,
             &cli_act,
             "inv-1",
@@ -916,7 +894,7 @@ mod tests {
             "--text",
             "Wi-Fi",
         ]);
-        persist_memory(
+        persist_test_memory(
             &store,
             &cli_verify,
             "inv-2",

@@ -3,7 +3,7 @@ use crate::cli::OutputFormat;
 use crate::core::error_code::ErrorCode;
 use serde_json::{Value, json};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CommandError {
     pub code: ErrorCode,
     pub message: String,

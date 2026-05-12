@@ -2,6 +2,7 @@ mod api;
 mod artifact;
 mod builder;
 mod cli;
+mod command_outcome;
 mod commands;
 mod config;
 mod core;
@@ -15,9 +16,10 @@ use crate::builder::ReqClientBuilder;
 use crate::cli::Cli;
 use crate::config::{require_token, require_url, resolve_settings};
 use crate::memory::MemoryStore;
+use crate::memory_recording::record_after_command;
 use crate::output::render_output;
 use crate::runner::{
-    persist_memory, run_app_command, run_command, run_config_command, run_connect_command,
+    run_app_command, run_command_outcome, run_config_command, run_connect_command,
     run_memory_command,
 };
 use clap::Parser;
@@ -49,7 +51,7 @@ fn main() -> anyhow::Result<()> {
                 remote.proxy,
             );
             let client = runtime.build()?;
-            let result = run_command(
+            let outcome = run_command_outcome(
                 &client,
                 &runtime,
                 &ctrl_c_events,
@@ -57,12 +59,14 @@ fn main() -> anyhow::Result<()> {
                 &settings,
                 memory_store.as_ref(),
             );
-            persist_memory(
+            let result = outcome.render(&runtime.invocation_id);
+            record_after_command(
                 &memory_store,
-                &cli,
-                &runtime.invocation_id,
-                &result,
-                started.elapsed().as_millis(),
+                crate::command_outcome::RecordingInput {
+                    cli: &cli,
+                    outcome: &outcome,
+                    duration_ms: started.elapsed().as_millis(),
+                },
             );
             result
         }
@@ -77,7 +81,7 @@ fn main() -> anyhow::Result<()> {
             )
             .with_token(Some(require_token(&settings)?.to_string()));
             let client = runtime.build()?;
-            let result = run_command(
+            let outcome = run_command_outcome(
                 &client,
                 &runtime,
                 &ctrl_c_events,
@@ -85,12 +89,14 @@ fn main() -> anyhow::Result<()> {
                 &settings,
                 memory_store.as_ref(),
             );
-            persist_memory(
+            let result = outcome.render(&runtime.invocation_id);
+            record_after_command(
                 &memory_store,
-                &cli,
-                &runtime.invocation_id,
-                &result,
-                started.elapsed().as_millis(),
+                crate::command_outcome::RecordingInput {
+                    cli: &cli,
+                    outcome: &outcome,
+                    duration_ms: started.elapsed().as_millis(),
+                },
             );
             result
         }

@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Refactor CLI memory recording to consume structured command outcomes instead of rendered output JSON, and split the memory module into facade/model/fingerprint/store components.
+
 ## [0.5.0-rc.1] - 2026-05-03
 
 Range: `app-v0.4.0` / `cli-v0.4.0` .. `app-v0.5.0-rc.1` / `cli-v0.5.0-rc.1`

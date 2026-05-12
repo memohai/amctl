@@ -82,6 +82,14 @@ Observe commands update session cache with quality-based overwrite. Failed obser
 
 **Not recorded**: full command result JSON, `observe screenshot/overlay/page`, `health`, `memory`.
 
+## Internal Recording Boundary
+
+Command execution produces a structured `CommandOutcome` before CLI rendering. The outcome carries the stable output payload used by `json`/`text` rendering plus optional `ObservationUpdate` metadata for `observe top|screen|refs|page`.
+
+Memory recording consumes that structured outcome, not the final output envelope. This keeps session cache updates, event status, failure cause extraction, and evidence capture independent from the external `status/category/op/data/error` wrapper.
+
+The `crate::memory` module is a facade over smaller memory components. `MemoryStore` remains the external entry point, while pure page fingerprint logic and data model types live in submodules so SQL storage and domain identity rules can evolve separately.
+
 ## Known Limits
 
 - WebView-heavy pages: `nodeReliability=low`; prefer `verify text-contains` over node/ref assumptions.

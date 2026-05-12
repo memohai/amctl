@@ -1,9 +1,11 @@
-use crate::cli::{ActCommands, Cli, Commands, ObserveCommands, RecoverCommands, VerifyCommands};
-use crate::memory::{
-    EventRecord, FingerprintRow, MemoryStore, PageContext, build_page_fingerprint,
-    package_name_from_activity,
+use crate::cli::{ActCommands, Commands, ObserveCommands, RecoverCommands, VerifyCommands};
+use crate::command_outcome::{
+    FingerprintRows, ObservationUpdate, OutcomeStatus, RecordingInput, output_error_value,
 };
-use serde_json::{Value, json};
+use crate::memory::{
+    EventRecord, MemoryStore, PageContext, build_page_fingerprint, package_name_from_activity,
+};
+use serde_json::json;
 
 /// Whether this command should be recorded as an event.
 pub fn should_record_event(command: &Commands) -> bool {
@@ -27,89 +29,55 @@ pub fn should_update_session_cache(command: &Commands) -> bool {
     )
 }
 
-/// Update session observation cache from an observe result.
+/// Update session observation cache from a structured observe result.
 ///
 /// Quality-based overwrite rules:
 /// - `observe top`:    only updates app + activity; never clears existing fingerprint
 /// - `observe screen`: strongest fingerprint, always overwrites
 /// - `observe refs`:   generates fingerprint, overwrites only if current source != "screen"
 ///   or fingerprint is empty
-pub fn update_session_cache(
-    store: &MemoryStore,
-    session: &str,
-    command: &Commands,
-    result: &Value,
-) {
-    if result.get("status").and_then(Value::as_str) != Some("ok") {
-        return;
-    }
-    let data = match result.get("data") {
-        Some(d) => d,
-        None => result,
-    };
+pub fn update_session_cache(store: &MemoryStore, session: &str, observation: &ObservationUpdate) {
     let now = chrono::Utc::now().to_rfc3339();
 
-    match command {
-        Commands::Observe {
-            command: ObserveCommands::Top,
-            ..
-        } => {
-            // observe top returns: { "topActivity": "pkg/act" }
-            if let Some(activity) = data.get("topActivity").and_then(Value::as_str) {
-                let app = package_name_from_activity(activity);
-                if let Err(e) = store.update_session_activity(session, &app, activity, &now) {
-                    eprintln!("warn: session_state update failed: {e}");
-                }
+    match observation {
+        ObservationUpdate::Top(top) => {
+            let app = package_name_from_activity(&top.activity);
+            if let Err(e) = store.update_session_activity(session, &app, &top.activity, &now) {
+                eprintln!("warn: session_state update failed: {e}");
             }
         }
-        Commands::Observe {
-            command: ObserveCommands::Screen { .. },
-            ..
-        } => {
-            let mode = data.get("mode").and_then(Value::as_str).unwrap_or("");
-            let has_webview = data
-                .get("hasWebView")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            let node_reliability = data
-                .get("nodeReliability")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-
+        ObservationUpdate::Screen(page) => {
             let existing = store.get_session_state(session).ok().flatten();
-            let activity = data
-                .get("topActivity")
-                .and_then(Value::as_str)
+            let activity = page
+                .activity
+                .as_deref()
                 .or_else(|| existing.as_ref().map(|c| c.activity.as_str()));
             let Some(activity) = activity else {
                 return;
             };
             let app = package_name_from_activity(activity);
 
-            let raw_rows = data
-                .get("rows")
-                .and_then(Value::as_array)
-                .or_else(|| data.get("fingerprintRows").and_then(Value::as_array));
-            let (page_fingerprint, fingerprint_source) = if let Some(raw_rows) = raw_rows {
-                let rows = extract_fingerprint_rows_from_screen(raw_rows);
-                (
-                    build_page_fingerprint(activity, mode, has_webview, &rows),
-                    "screen".to_string(),
-                )
-            } else if let Some(ctx) = &existing {
-                (ctx.page_fingerprint.clone(), ctx.fingerprint_source.clone())
-            } else {
-                return;
-            };
+            let (page_fingerprint, fingerprint_source) =
+                if let Some(rows) = page.fingerprint_rows.as_ref() {
+                    let borrowed = rows.as_borrowed();
+                    (
+                        build_page_fingerprint(activity, &page.mode, page.has_webview, &borrowed),
+                        rows.source().to_string(),
+                    )
+                } else if let Some(ctx) = &existing {
+                    (ctx.page_fingerprint.clone(), ctx.fingerprint_source.clone())
+                } else {
+                    return;
+                };
 
             let ctx = PageContext {
                 app,
                 activity: activity.to_string(),
                 page_fingerprint,
                 fingerprint_source,
-                mode: mode.into(),
-                has_webview,
-                node_reliability: node_reliability.into(),
+                mode: page.mode.clone(),
+                has_webview: page.has_webview,
+                node_reliability: page.node_reliability.clone(),
                 ref_version: existing.as_ref().and_then(|c| c.ref_version),
                 observed_at: now,
             };
@@ -117,26 +85,9 @@ pub fn update_session_cache(
                 eprintln!("warn: session_state update (screen) failed: {e}");
             }
         }
-        Commands::Observe {
-            command: ObserveCommands::Refs { .. },
-            ..
-        } => {
-            let mode = data.get("mode").and_then(Value::as_str).unwrap_or("");
-            let has_webview = data
-                .get("hasWebView")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            let node_reliability = data
-                .get("nodeReliability")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let ref_version = data.get("refVersion").and_then(Value::as_u64);
-
+        ObservationUpdate::Refs(page) => {
             let existing = store.get_session_state(session).ok().flatten();
-            let explicit_activity = data
-                .get("topActivity")
-                .and_then(Value::as_str)
-                .map(str::to_string);
+            let explicit_activity = page.activity.clone();
             let activity_owned = explicit_activity.clone().or_else(|| {
                 existing
                     .as_ref()
@@ -161,20 +112,25 @@ pub fn update_session_cache(
             };
 
             if should_overwrite {
-                let empty = vec![];
-                let raw_rows = data.get("rows").and_then(Value::as_array).unwrap_or(&empty);
-                let rows = extract_fingerprint_rows_from_refs(raw_rows);
-                let fp = build_page_fingerprint(&activity_owned, mode, has_webview, &rows);
+                let empty = FingerprintRows::Refs(Vec::new());
+                let rows = page.fingerprint_rows.as_ref().unwrap_or(&empty);
+                let borrowed = rows.as_borrowed();
+                let fp = build_page_fingerprint(
+                    &activity_owned,
+                    &page.mode,
+                    page.has_webview,
+                    &borrowed,
+                );
 
                 let ctx = PageContext {
                     app,
                     activity: activity_owned,
                     page_fingerprint: fp,
                     fingerprint_source: "refs".into(),
-                    mode: mode.into(),
-                    has_webview,
-                    node_reliability: node_reliability.into(),
-                    ref_version,
+                    mode: page.mode.clone(),
+                    has_webview: page.has_webview,
+                    node_reliability: page.node_reliability.clone(),
+                    ref_version: page.ref_version,
                     observed_at: now,
                 };
                 if let Err(e) = store.update_session_state(session, &ctx) {
@@ -183,7 +139,7 @@ pub fn update_session_cache(
             } else if let Some(mut ctx) = existing {
                 ctx.activity = activity_owned;
                 ctx.app = app;
-                ctx.ref_version = ref_version;
+                ctx.ref_version = page.ref_version;
                 if explicit_activity.is_some() {
                     ctx.observed_at = now;
                 }
@@ -192,55 +148,17 @@ pub fn update_session_cache(
                 }
             }
         }
-        Commands::Observe {
-            command: ObserveCommands::Page { .. },
-            ..
-        } => {
-            let activity = data
-                .get("topActivity")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty());
-            let Some(activity) = activity else {
+        ObservationUpdate::Page(page) => {
+            let Some(activity) = page.activity.as_deref().filter(|value| !value.is_empty()) else {
                 return;
             };
             let app = package_name_from_activity(activity);
 
-            let mode_str = data.get("mode").and_then(Value::as_str).unwrap_or("");
-            let has_webview = data
-                .get("hasWebView")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            let node_reliability = data
-                .get("nodeReliability")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-
-            let ref_version = data
-                .get("refs")
-                .and_then(|r| r.get("refVersion"))
-                .and_then(Value::as_u64);
-
-            // Build fingerprint: prefer screen rows (strongest), fall back to refs rows
-            let screen_rows = data
-                .get("screen")
-                .and_then(|s| s.get("rows").or_else(|| s.get("fingerprintRows")))
-                .and_then(Value::as_array);
-            let refs_rows = data
-                .get("refs")
-                .and_then(|r| r.get("rows"))
-                .and_then(Value::as_array);
-
-            let (fp, source) = if let Some(rows) = screen_rows {
-                let fr = extract_fingerprint_rows_from_screen(rows);
+            let (fp, source) = if let Some(rows) = page.fingerprint_rows.as_ref() {
+                let borrowed = rows.as_borrowed();
                 (
-                    build_page_fingerprint(activity, mode_str, has_webview, &fr),
-                    "screen",
-                )
-            } else if let Some(rows) = refs_rows {
-                let fr = extract_fingerprint_rows_from_refs(rows);
-                (
-                    build_page_fingerprint(activity, mode_str, has_webview, &fr),
-                    "refs",
+                    build_page_fingerprint(activity, &page.mode, page.has_webview, &borrowed),
+                    rows.source(),
                 )
             } else {
                 (String::new(), "top")
@@ -251,28 +169,39 @@ pub fn update_session_cache(
                 activity: activity.to_string(),
                 page_fingerprint: fp,
                 fingerprint_source: source.into(),
-                mode: mode_str.into(),
-                has_webview,
-                node_reliability: node_reliability.into(),
-                ref_version,
+                mode: page.mode.clone(),
+                has_webview: page.has_webview,
+                node_reliability: page.node_reliability.clone(),
+                ref_version: page.ref_version,
                 observed_at: now,
             };
             if let Err(e) = store.update_session_state(session, &ctx) {
                 eprintln!("warn: session_state update (page) failed: {e}");
             }
         }
-        _ => {}
+    }
+}
+
+pub fn record_after_command(memory_store: &Option<MemoryStore>, input: RecordingInput<'_>) {
+    let Some(store) = memory_store else {
+        return;
+    };
+
+    if input.outcome.status() == OutcomeStatus::Ok
+        && should_update_session_cache(&input.cli.command)
+        && let Some(observation) = input.outcome.observation.as_ref()
+    {
+        update_session_cache(store, &input.cli.session, observation);
+    }
+
+    if should_record_event(&input.cli.command) {
+        record_event_and_close(store, input);
     }
 }
 
 /// Record an event for act/verify/recover and handle deferred transition/recovery closing.
-pub fn record_event_and_close(
-    store: &MemoryStore,
-    cli: &Cli,
-    _invocation_id: &str,
-    result: &Value,
-    duration_ms: u128,
-) {
+pub fn record_event_and_close(store: &MemoryStore, input: RecordingInput<'_>) {
+    let cli = input.cli;
     let (app, activity, page_fingerprint) = match store.get_session_state(&cli.session) {
         Ok(Some(ctx)) => (
             ctx.app.clone(),
@@ -283,17 +212,12 @@ pub fn record_event_and_close(
     };
 
     let shape = describe_command(&cli.command);
-    let status = result
-        .get("status")
-        .and_then(Value::as_str)
-        .unwrap_or("unknown");
-    let error_code = result
-        .get("error")
-        .and_then(|e| e.get("code"))
-        .and_then(Value::as_str);
-    let failure_cause_owned = extract_failure_cause(result);
+    let status = input.outcome.status().as_str();
+    let error_code_owned = input.outcome.error().and_then(error_code_string);
+    let error_code = error_code_owned.as_deref();
+    let failure_cause_owned = input.outcome.error().and_then(extract_failure_cause);
     let failure_cause = failure_cause_owned.as_deref();
-    let evidence_json = build_evidence_json(&cli.command, result);
+    let evidence_json = build_evidence_json(&cli.command, input.outcome);
 
     let event_id = match store.record_event(&EventRecord {
         session: &cli.session,
@@ -307,7 +231,7 @@ pub fn record_event_and_close(
         error_code,
         failure_cause,
         evidence_json: &evidence_json,
-        duration_ms: duration_ms as i64,
+        duration_ms: input.duration_ms as i64,
     }) {
         Ok(id) => id,
         Err(e) => {
@@ -433,33 +357,36 @@ fn try_record_recovery(store: &MemoryStore, session: &str, recover_event_id: i64
     }
 }
 
-/// Extract a structured failure cause from the error output.
+/// Extract a structured failure cause from a command error.
 ///
 /// Tries these sources in order:
 /// 1. `error.message` prefix before `:` (e.g. "REF_ALIAS_STALE: ref=@n5" → "REF_ALIAS_STALE")
 /// 2. `error.code` (e.g. "SERVER_ERROR", "ASSERTION_FAILED")
-fn extract_failure_cause(result: &Value) -> Option<String> {
-    let error = result.get("error")?;
-    if let Some(msg) = error.get("message").and_then(Value::as_str) {
-        if let Some(prefix) = msg.split(':').next() {
-            let trimmed = prefix.trim();
-            if trimmed.chars().all(|c| c.is_ascii_uppercase() || c == '_') && !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
+fn extract_failure_cause(error: &crate::output::CommandError) -> Option<String> {
+    if let Some(prefix) = error.message.split(':').next() {
+        let trimmed = prefix.trim();
+        if trimmed.chars().all(|c| c.is_ascii_uppercase() || c == '_') && !trimmed.is_empty() {
+            return Some(trimmed.to_string());
         }
     }
-    error
-        .get("code")
-        .and_then(Value::as_str)
-        .map(str::to_string)
+    error_code_string(error)
+}
+
+fn error_code_string(error: &crate::output::CommandError) -> Option<String> {
+    serde_json::to_value(error.code)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
 }
 
 /// Build evidence JSON capturing execution details for later analysis.
-fn build_evidence_json(command: &Commands, result: &Value) -> String {
-    let error_obj = result.get("error").cloned();
+fn build_evidence_json(
+    command: &Commands,
+    outcome: &crate::command_outcome::CommandOutcome,
+) -> String {
+    let error_obj = outcome.error().map(output_error_value);
     match command {
         Commands::Verify { command: vc, .. } => {
-            let data = result.get("data").cloned().unwrap_or(json!({}));
+            let data = outcome.data().cloned().unwrap_or(json!({}));
             match vc {
                 VerifyCommands::TextContains { text, .. } => {
                     json!({"type": "text-contains", "expected": text, "data": data, "error": error_obj}).to_string()
@@ -474,7 +401,7 @@ fn build_evidence_json(command: &Commands, result: &Value) -> String {
         }
         Commands::Act { .. } | Commands::Recover { .. } => {
             if let Some(err) = error_obj {
-                let data = result.get("data").cloned();
+                let data = outcome.data().cloned();
                 json!({"error": err, "data": data}).to_string()
             } else {
                 "{}".into()
@@ -482,38 +409,6 @@ fn build_evidence_json(command: &Commands, result: &Value) -> String {
         }
         _ => "{}".into(),
     }
-}
-
-fn extract_fingerprint_rows_from_screen<'a>(rows: &'a [Value]) -> Vec<FingerprintRow<'a>> {
-    rows.iter()
-        .filter_map(|row| {
-            let class_name = row
-                .get("class_name")
-                .or_else(|| row.get("class"))
-                .and_then(Value::as_str);
-            let res_id = row
-                .get("res_id")
-                .or_else(|| row.get("resId"))
-                .and_then(Value::as_str);
-            if class_name.is_none() && res_id.is_none() {
-                return None;
-            }
-            Some(FingerprintRow { class_name, res_id })
-        })
-        .collect()
-}
-
-fn extract_fingerprint_rows_from_refs<'a>(rows: &'a [Value]) -> Vec<FingerprintRow<'a>> {
-    rows.iter()
-        .filter_map(|row| {
-            let class_name = row.get("class").and_then(Value::as_str);
-            let res_id = row.get("resId").and_then(Value::as_str);
-            if class_name.is_none() && res_id.is_none() {
-                return None;
-            }
-            Some(FingerprintRow { class_name, res_id })
-        })
-        .collect()
 }
 
 struct CommandShape {
@@ -638,7 +533,9 @@ fn describe_command(command: &Commands) -> CommandShape {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::Cli;
     use clap::Parser;
+    use serde_json::Value;
 
     fn parse_cli(args: &str) -> Cli {
         let mut parts = vec!["af".to_string()];
@@ -655,6 +552,49 @@ mod tests {
         }
         parts.extend(iter.map(str::to_string));
         Cli::parse_from(parts)
+    }
+
+    fn update_session_cache(
+        store: &MemoryStore,
+        session: &str,
+        command: &Commands,
+        result: &Value,
+    ) {
+        if result.get("status").and_then(Value::as_str) != Some("ok") {
+            return;
+        }
+        let Some(data) = result.get("data").or(Some(result)) else {
+            return;
+        };
+        if let Commands::Observe { command, .. } = command
+            && let Some(observation) = ObservationUpdate::from_observe_data(command, data)
+        {
+            super::update_session_cache(store, session, &observation);
+        }
+    }
+
+    fn extract_failure_cause(result: &Value) -> Option<String> {
+        let error = result.get("error")?;
+        let message = error.get("message").and_then(Value::as_str).unwrap_or("");
+        let code = error
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or("INTERNAL_ERROR");
+        let mapped_code = match code {
+            "SERVER_ERROR" => crate::core::error_code::ErrorCode::ServerError,
+            "ASSERTION_FAILED" => crate::core::error_code::ErrorCode::AssertionFailed,
+            "NETWORK_ERROR" => crate::core::error_code::ErrorCode::NetworkError,
+            _ => crate::core::error_code::ErrorCode::InternalError,
+        };
+        let err = crate::output::CommandError {
+            code: mapped_code,
+            message: message.to_string(),
+            retryable: false,
+            status: None,
+            raw: None,
+            details: None,
+        };
+        super::extract_failure_cause(&err).or_else(|| Some(code.to_string()))
     }
 
     #[test]
