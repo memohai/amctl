@@ -22,12 +22,26 @@ Autofish has two components:
 
 ## Install and Connect
 
-Use the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/releases), then open the app on the Android device:
+Install Autofish from npm:
+
+```bash
+npm i -g @memohjs/af
+```
+
+Install the matching official Autofish Android app through the CLI:
+
+```bash
+af app install --device <ADB_SERIAL>
+```
+
+Then open Autofish on the Android device:
 
 1. Enable the Autofish accessibility service.
 2. Enable Shizuku support when available.
 3. Turn on **Service** from the Autofish home page.
 4. Copy the `af config` commands or raw `IP` / `PORT` / `TOKEN` from the home page connection card.
+
+If adb is not available, install the latest APK manually from [GitHub Releases](https://github.com/memohai/Autofish/releases).
 
 Shizuku setup:
 
@@ -42,18 +56,6 @@ Notes:
 
 - **Service** must be turned on before `af health`, `observe`, `act`, or `verify` can reach the device.
 - If Shizuku is not running, Autofish can still use the accessibility fallback when **Accessibility Service** is enabled.
-
-Install the CLI on your development machine:
-
-```bash
-npm i -g @memohjs/af
-```
-
-If the device is connected with adb, install the official Autofish App version that matches the current `af` CLI:
-
-```bash
-af app install --device <ADB_SERIAL>
-```
 
 Configure the CLI with the commands copied from the Android app home page, or set the values manually:
 

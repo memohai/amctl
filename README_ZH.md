@@ -22,12 +22,26 @@ Autofish 包含两个组件：
 
 ## 安装并连接
 
-从 [GitHub Releases](https://github.com/memohai/Autofish/releases) 安装最新 APK，然后在 Android 设备上打开应用：
+从 npm 安装 Autofish：
+
+```bash
+npm i -g @memohjs/af
+```
+
+通过 CLI 安装与当前 `af` 版本匹配的官方 Autofish Android 应用：
+
+```bash
+af app install --device <ADB_SERIAL>
+```
+
+然后在 Android 设备上打开 Autofish：
 
 1. 启用 Autofish 无障碍服务。
 2. 可用时启用 Shizuku 支持。
 3. 在 Autofish 首页打开 **Service**。
 4. 从首页连接信息卡片复制 `af config` 命令，或复制原始 `IP` / `PORT` / `TOKEN`。
+
+如果无法使用 adb，也可以从 [GitHub Releases](https://github.com/memohai/Autofish/releases) 手动安装最新 APK。
 
 <p>
   <img src="./docs/assets/autofish-home.png" alt="Autofish 首页" width="260" />
@@ -49,18 +63,6 @@ Shizuku 设置：
 - 如果 Shizuku 没有运行，只要 **Accessibility Service** 已启用，Autofish 仍可使用无障碍回退路径。
 - 首页连接信息卡片可以复制 agent 可直接使用的 `af config` 命令。请把 token 当作密钥处理，不要公开包含它的截图或日志。
 - USB 连接优先使用 `af connect usb`；它会从 App 的非敏感连接 hint 自动建立 adb 转发。
-
-在开发机上安装 CLI：
-
-```bash
-npm i -g @memohjs/af
-```
-
-如果设备已经通过 adb 连接，可以安装与当前 `af` CLI 版本一致的官方 Autofish App：
-
-```bash
-af app install --device <ADB_SERIAL>
-```
 
 使用 Android 应用首页复制的命令配置 CLI，或手动设置这些值：
 
