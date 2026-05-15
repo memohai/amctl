@@ -12,6 +12,9 @@ human → agent → autofish → Android device
          └── observe / verify ───┘
 ```
 
+
+[![Autofish](./docs/assets/autofish-cover.jpeg)](./docs/assets/autofish-6x.mp4)
+
 ## How It Works
 
 Autofish has two components:
