@@ -109,7 +109,7 @@ af config set output.default "text"
 
 ```bash
 af app install --device <ADB_SERIAL>
-af app install --device <ADB_SERIAL> --version 0.4.0 --dry-run
+af app install --device <ADB_SERIAL> --version 0.5.0 --dry-run
 af app uninstall --device <ADB_SERIAL>
 af app uninstall --device <ADB_SERIAL> --dry-run
 ```
