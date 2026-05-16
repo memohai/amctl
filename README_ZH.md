@@ -231,7 +231,7 @@ Autofish 保持边界清晰：**设备控制是基础设施，不是应用逻辑
 
 ## 从源码构建
 
-要求：JDK 17、Android SDK API 36、Rust 工具链、`just`。
+要求：JDK 21、Android SDK API 36、Rust 工具链、`just`。
 
 ```bash
 just build

@@ -230,7 +230,7 @@ Contributions are welcome. If you want to improve Autofish, please start with an
 
 ## Build from Source
 
-Requirements: JDK 17, Android SDK API 36, Rust toolchain, `just`.
+Requirements: JDK 21, Android SDK API 36, Rust toolchain, `just`.
 
 ```bash
 just build
