@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.serialization)
@@ -11,12 +10,16 @@ plugins {
 
 fun Project.gitOutputOrNull(vararg args: String): String? =
     runCatching {
-        val execOutput = providers.exec {
-            commandLine("git", *args)
-        }
+        val execOutput =
+            providers.exec {
+                commandLine("git", *args)
+            }
         val result = execOutput.result.get()
         if (result.exitValue == 0) {
-            execOutput.standardOutput.asText.get().trim().ifBlank { null }
+            execOutput.standardOutput.asText
+                .get()
+                .trim()
+                .ifBlank { null }
         } else {
             null
         }
@@ -27,19 +30,24 @@ val gitCommitCount = project.gitOutputOrNull("rev-list", "--count", "HEAD")?.toI
 
 val rawVersionNameProp = project.findProperty("VERSION_NAME") as String?
 val rawVersionCodeProp = (project.findProperty("VERSION_CODE") as String?)?.toIntOrNull()
-val useGitVersionFallback = rawVersionNameProp == null || rawVersionNameProp == "0.1.0" ||
-    rawVersionCodeProp == null || rawVersionCodeProp == 1
+val useGitVersionFallback =
+    rawVersionNameProp == null ||
+        rawVersionNameProp == "0.1.0" ||
+        rawVersionCodeProp == null ||
+        rawVersionCodeProp == 1
 
-val versionNameProp = if (useGitVersionFallback) {
-    "0.1.0-dev${gitShortSha?.let { "+$it" } ?: ""}"
-} else {
-    rawVersionNameProp!!
-}
-val versionCodeProp = if (useGitVersionFallback) {
-    gitCommitCount ?: 1
-} else {
-    rawVersionCodeProp!!
-}
+val versionNameProp =
+    if (useGitVersionFallback) {
+        "0.1.0-dev${gitShortSha?.let { "+$it" } ?: ""}"
+    } else {
+        rawVersionNameProp!!
+    }
+val versionCodeProp =
+    if (useGitVersionFallback) {
+        gitCommitCount ?: 1
+    } else {
+        rawVersionCodeProp!!
+    }
 
 android {
     namespace = "com.memohai.autofish"
@@ -69,14 +77,6 @@ android {
         }
     }
 
-    applicationVariants.all {
-        val variant = this
-        outputs.all {
-            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            output.outputFileName = "auto-fish-${variant.versionName}-${variant.buildType.name}.apk"
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -102,6 +102,14 @@ android {
         jniLibs {
             keepDebugSymbols += "**/libandroidx.graphics.path.so"
             keepDebugSymbols += "**/libdatastore_shared_counter.so"
+        }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            output.outputFileName.set("auto-fish-$versionNameProp-${variant.buildType}.apk")
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.memohai.autofish.ui.components
 
+import android.content.ClipData
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,15 +17,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.memohai.autofish.R
 import com.memohai.autofish.data.model.ServerConfig
+import kotlinx.coroutines.launch
 
 @Composable
 fun ServiceConfigurationSection(
@@ -34,7 +37,8 @@ fun ServiceConfigurationSection(
     onRegenerateToken: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
@@ -69,7 +73,11 @@ fun ServiceConfigurationSection(
                 )
                 IconButton(onClick = {
                     if (config.serviceBearerToken.isNotEmpty()) {
-                        clipboardManager.setText(AnnotatedString(config.serviceBearerToken))
+                        coroutineScope.launch {
+                            clipboard.setClipEntry(
+                                ClipEntry(ClipData.newPlainText("Autofish", config.serviceBearerToken)),
+                            )
+                        }
                     }
                 }) {
                     Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.copy_token))

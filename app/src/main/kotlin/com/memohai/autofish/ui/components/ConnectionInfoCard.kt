@@ -1,5 +1,6 @@
 package com.memohai.autofish.ui.components
 
+import android.content.ClipData
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,13 +13,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.memohai.autofish.R
+import kotlinx.coroutines.launch
 
 @Composable
 @Suppress("FunctionName")
@@ -29,8 +32,9 @@ fun ConnectionInfoCard(
     isServiceRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val copiedText = stringResource(R.string.copied_to_clipboard)
     val lanUrlComment = stringResource(R.string.copy_lan_url_comment)
     val ip = deviceIp?.takeIf { it.isNotBlank() }
@@ -39,8 +43,10 @@ fun ConnectionInfoCard(
     val canCopy = ip != null && token != null
 
     fun copy(text: String) {
-        clipboardManager.setText(AnnotatedString(text))
-        Toast.makeText(context, copiedText, Toast.LENGTH_SHORT).show()
+        coroutineScope.launch {
+            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Autofish", text)))
+            Toast.makeText(context, copiedText, Toast.LENGTH_SHORT).show()
+        }
     }
 
     Card(modifier = modifier.fillMaxWidth()) {
