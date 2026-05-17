@@ -30,7 +30,7 @@ class ShellInputInjector
         private fun execQuiet(command: String): Boolean = try {
             shizukuProvider.exec(command)
             true
-        } catch (e: Exception) {
+        } catch (e: ShizukuExecutionException) {
             Log.w(TAG, "Shell input failed: $command", e)
             false
         }

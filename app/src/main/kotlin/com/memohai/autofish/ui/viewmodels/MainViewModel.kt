@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
+@Suppress("TooManyFunctions")
 class MainViewModel
     @Inject
     constructor(
@@ -39,7 +40,7 @@ class MainViewModel
     ) : AndroidViewModel(application) {
 
         val serverConfig: StateFlow<ServerConfig> = settingsRepository.serverConfig
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ServerConfig())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(CONFIG_STOP_TIMEOUT_MS), ServerConfig())
 
         val serviceServerStatus: StateFlow<ServerStatus> = ServiceServerService.serverStatus
 
@@ -53,7 +54,8 @@ class MainViewModel
         val controlMode: StateFlow<String> = _controlMode.asStateFlow()
         private val _accessibilityEnabled = MutableStateFlow(isAccessibilityEnabledNow())
         val accessibilityEnabled: StateFlow<Boolean> = _accessibilityEnabled.asStateFlow()
-        private val _notificationsEnabled = MutableStateFlow(NotificationManagerCompat.from(application).areNotificationsEnabled())
+        private val _notificationsEnabled =
+            MutableStateFlow(NotificationManagerCompat.from(application).areNotificationsEnabled())
         val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
         private val _refPanelState = MutableStateFlow<ServiceServer.RefPanelStatePayload?>(null)
         val refPanelState: StateFlow<ServiceServer.RefPanelStatePayload?> = _refPanelState.asStateFlow()
@@ -61,6 +63,8 @@ class MainViewModel
         companion object {
             private const val SHIZUKU_PERMISSION_REQUEST_CODE = 1001
             private const val STATUS_POLL_INTERVAL_MS = 3000L
+            private const val CONFIG_STOP_TIMEOUT_MS = 5000L
+            private const val SHIZUKU_PERMISSION_REFRESH_DELAY_MS = 1000L
         }
 
         init {
@@ -75,7 +79,7 @@ class MainViewModel
         fun requestShizukuPermission() {
             shizukuProvider.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
             viewModelScope.launch {
-                delay(1000)
+                delay(SHIZUKU_PERMISSION_REFRESH_DELAY_MS)
                 refreshStatuses()
             }
         }

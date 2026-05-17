@@ -12,7 +12,10 @@ class CompactTreeFormatter
             sb.appendLine(NOTE_LINE)
             sb.appendLine(NOTE_LINE_FLAGS_LEGEND)
             sb.appendLine(NOTE_LINE_OFFSCREEN_HINT)
-            sb.appendLine("screen:${screenInfo.width}x${screenInfo.height} density:${screenInfo.densityDpi} orientation:${screenInfo.orientation}")
+            sb.appendLine(
+                "screen:${screenInfo.width}x${screenInfo.height} " +
+                    "density:${screenInfo.densityDpi} orientation:${screenInfo.orientation}",
+            )
 
             for (windowData in result.windows) {
                 sb.appendLine(buildWindowHeader(windowData))
@@ -105,7 +108,8 @@ class CompactTreeFormatter
             const val DEGRADATION_NOTE = "note:DEGRADED — multi-window unavailable, only active window reported"
             const val NOTE_LINE = "note:structural-only nodes are omitted from the tree"
             const val NOTE_LINE_FLAGS_LEGEND =
-                "note:flags: on=onscreen off=offscreen clk=clickable lclk=longClickable foc=focusable scr=scrollable edt=editable ena=enabled"
+                "note:flags: on=onscreen off=offscreen clk=clickable " +
+                    "lclk=longClickable foc=focusable scr=scrollable edt=editable ena=enabled"
             const val NOTE_LINE_OFFSCREEN_HINT = "note:offscreen items require scroll_to_node before interaction"
             const val HIERARCHY_HEADER = "hierarchy:"
             private const val HIERARCHY_INDENT = "  "

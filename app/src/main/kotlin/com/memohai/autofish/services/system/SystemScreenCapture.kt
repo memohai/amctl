@@ -14,7 +14,13 @@ class SystemScreenCapture
 
         fun capture(maxWidth: Int = 0, maxHeight: Int = 0): Bitmap? = try {
             captureApi34(maxWidth, maxHeight) ?: captureApi31(maxWidth, maxHeight)
-        } catch (e: Exception) {
+        } catch (e: ReflectiveOperationException) {
+            Log.w(TAG, "SurfaceControl.screenshot() reflection failed", e)
+            null
+        } catch (e: SecurityException) {
+            Log.w(TAG, "SurfaceControl.screenshot() reflection failed", e)
+            null
+        } catch (e: ClassCastException) {
             Log.w(TAG, "SurfaceControl.screenshot() reflection failed", e)
             null
         }
@@ -35,6 +41,7 @@ class SystemScreenCapture
             )
             screenshotMethod.invoke(null, displayToken, Rect(), maxWidth, maxHeight, 0) as? Bitmap
         } catch (e: NoSuchMethodException) {
+            Log.d(TAG, "API 34 SurfaceControl screenshot method unavailable", e)
             null
         }
 
@@ -58,6 +65,7 @@ class SystemScreenCapture
             )
             screenshotMethod.invoke(null, displayToken, Rect(), maxWidth, maxHeight, 0) as? Bitmap
         } catch (e: NoSuchMethodException) {
+            Log.d(TAG, "API 31 SurfaceControl screenshot method unavailable", e)
             null
         }
 

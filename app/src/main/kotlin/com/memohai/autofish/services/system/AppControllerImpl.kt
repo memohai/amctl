@@ -3,6 +3,8 @@ package com.memohai.autofish.services.system
 import android.util.Log
 import javax.inject.Inject
 
+private class IntentStartException(message: String) : IllegalStateException(message)
+
 class AppControllerImpl
     @Inject
     constructor(
@@ -20,7 +22,7 @@ class AppControllerImpl
                 shizukuProvider.exec("am start -n $resolveOutput")
                 Result.success(resolveOutput)
             }
-        } catch (e: Exception) {
+        } catch (e: ShizukuExecutionException) {
             Log.w(TAG, "launch failed: $packageName", e)
             Result.failure(e)
         }
@@ -28,21 +30,22 @@ class AppControllerImpl
         override fun forceStop(packageName: String): Result<Unit> = try {
             shizukuProvider.exec("am force-stop $packageName")
             Result.success(Unit)
-        } catch (e: Exception) {
+        } catch (e: ShizukuExecutionException) {
             Log.w(TAG, "forceStop failed: $packageName", e)
             Result.failure(e)
         }
 
         override fun getTopActivity(): String? = try {
             val output = shizukuProvider.exec(
-                "dumpsys activity activities | grep -E 'topResumedActivity=|ResumedActivity:|mResumedActivity=' | head -1",
+                "dumpsys activity activities | " +
+                    "grep -E 'topResumedActivity=|ResumedActivity:|mResumedActivity=' | head -1",
             ).trim()
             if (output.isNotBlank()) {
                 parseTopActivityOutput(output)
             } else {
                 null
             }
-        } catch (e: Exception) {
+        } catch (e: ShizukuExecutionException) {
             Log.w(TAG, "getTopActivity failed", e)
             null
         }
@@ -59,7 +62,7 @@ class AppControllerImpl
                 }
                 .sorted()
             Result.success(packages)
-        } catch (e: Exception) {
+        } catch (e: ShizukuExecutionException) {
             Log.w(TAG, "listPackages failed", e)
             Result.failure(e)
         }
@@ -67,7 +70,7 @@ class AppControllerImpl
         override fun execShell(command: String): Result<String> = try {
             val output = shizukuProvider.exec(command)
             Result.success(output)
-        } catch (e: Exception) {
+        } catch (e: ShizukuExecutionException) {
             Log.w(TAG, "execShell failed: $command", e)
             Result.failure(e)
         }
@@ -89,11 +92,11 @@ class AppControllerImpl
             }
             val output = shizukuProvider.exec(cmd).trim()
             if (output.contains("Error") || output.contains("Exception")) {
-                Result.failure(RuntimeException(output))
+                Result.failure(IntentStartException(output))
             } else {
                 Result.success(output.ifBlank { "Intent started" })
             }
-        } catch (e: Exception) {
+        } catch (e: ShizukuExecutionException) {
             Log.w(TAG, "startIntent failed", e)
             Result.failure(e)
         }

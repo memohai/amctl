@@ -18,7 +18,10 @@ class SystemInputInjector
             try {
                 val clazz = Class.forName("android.hardware.input.InputManager")
                 clazz.getMethod("getInstance").invoke(null)
-            } catch (e: Exception) {
+            } catch (e: ReflectiveOperationException) {
+                Log.w(TAG, "InputManager.getInstance() reflection failed", e)
+                null
+            } catch (e: SecurityException) {
                 Log.w(TAG, "InputManager.getInstance() reflection failed", e)
                 null
             }
@@ -31,7 +34,10 @@ class SystemInputInjector
                     InputEvent::class.java,
                     Int::class.javaPrimitiveType,
                 )
-            } catch (e: Exception) {
+            } catch (e: ReflectiveOperationException) {
+                Log.w(TAG, "injectInputEvent method not found", e)
+                null
+            } catch (e: SecurityException) {
                 Log.w(TAG, "injectInputEvent method not found", e)
                 null
             }
@@ -62,33 +68,41 @@ class SystemInputInjector
         fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long): Boolean {
             val downTime = SystemClock.uptimeMillis()
             val steps = maxOf((durationMs / FRAME_INTERVAL_MS).toInt(), 1)
-
-            if (!injectMotion(downTime, downTime, MotionEvent.ACTION_DOWN, x1, y1)) return false
+            var injected = injectMotion(downTime, downTime, MotionEvent.ACTION_DOWN, x1, y1)
 
             for (i in 1..steps) {
                 val fraction = i.toFloat() / steps
                 val x = x1 + (x2 - x1) * fraction
                 val y = y1 + (y2 - y1) * fraction
                 val eventTime = downTime + durationMs * i / steps
-                if (!injectMotion(downTime, eventTime, MotionEvent.ACTION_MOVE, x, y)) return false
-                Thread.sleep(FRAME_INTERVAL_MS)
+                if (injected) {
+                    injected = injectMotion(downTime, eventTime, MotionEvent.ACTION_MOVE, x, y)
+                    Thread.sleep(FRAME_INTERVAL_MS)
+                }
             }
 
-            return injectMotion(downTime, downTime + durationMs, MotionEvent.ACTION_UP, x2, y2)
+            return injected && injectMotion(downTime, downTime + durationMs, MotionEvent.ACTION_UP, x2, y2)
         }
 
         fun keyEvent(keyCode: Int): Boolean {
-            val im = inputManager ?: return false
-            val method = injectMethod ?: return false
-            return try {
-                val now = SystemClock.uptimeMillis()
-                val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0)
-                val up = KeyEvent(now, now + TAP_DURATION_MS, KeyEvent.ACTION_UP, keyCode, 0)
-                method.invoke(im, down, INJECT_MODE_ASYNC) as Boolean &&
-                    method.invoke(im, up, INJECT_MODE_ASYNC) as Boolean
-            } catch (e: Exception) {
-                Log.w(TAG, "injectInputEvent keyEvent failed", e)
+            val im = inputManager
+            val method = injectMethod
+            return if (im == null || method == null) {
                 false
+            } else {
+                try {
+                    val now = SystemClock.uptimeMillis()
+                    val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0)
+                    val up = KeyEvent(now, now + TAP_DURATION_MS, KeyEvent.ACTION_UP, keyCode, 0)
+                    method.invoke(im, down, INJECT_MODE_ASYNC) as? Boolean == true &&
+                        method.invoke(im, up, INJECT_MODE_ASYNC) as? Boolean == true
+                } catch (e: ReflectiveOperationException) {
+                    Log.w(TAG, "injectInputEvent keyEvent failed", e)
+                    false
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "injectInputEvent keyEvent failed", e)
+                    false
+                }
             }
         }
 
@@ -99,17 +113,24 @@ class SystemInputInjector
             x: Float,
             y: Float,
         ): Boolean {
-            val im = inputManager ?: return false
-            val method = injectMethod ?: return false
-            val event = MotionEvent.obtain(downTime, eventTime, action, x, y, 0)
-            return try {
-                event.source = InputDevice.SOURCE_TOUCHSCREEN
-                method.invoke(im, event, INJECT_MODE_ASYNC) as Boolean
-            } catch (e: Exception) {
-                Log.w(TAG, "injectInputEvent motion failed", e)
+            val im = inputManager
+            val method = injectMethod
+            return if (im == null || method == null) {
                 false
-            } finally {
-                event.recycle()
+            } else {
+                val event = MotionEvent.obtain(downTime, eventTime, action, x, y, 0)
+                try {
+                    event.source = InputDevice.SOURCE_TOUCHSCREEN
+                    method.invoke(im, event, INJECT_MODE_ASYNC) as? Boolean == true
+                } catch (e: ReflectiveOperationException) {
+                    Log.w(TAG, "injectInputEvent motion failed", e)
+                    false
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "injectInputEvent motion failed", e)
+                    false
+                } finally {
+                    event.recycle()
+                }
             }
         }
 

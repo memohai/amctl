@@ -26,6 +26,7 @@ import com.memohai.autofish.R
 import com.memohai.autofish.data.model.ServerStatus
 
 @Composable
+@Suppress("FunctionNaming", "LongMethod")
 fun ServerStatusCard(
     serverStatus: ServerStatus,
     onToggle: (Boolean) -> Unit,

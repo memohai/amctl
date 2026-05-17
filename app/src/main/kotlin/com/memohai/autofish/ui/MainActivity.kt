@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
 import com.memohai.autofish.R
@@ -56,9 +57,10 @@ class MainActivity : AppCompatActivity() {
 
         enableEdgeToEdge()
         setContent {
-            val appThemeMode by settingsRepository.serverConfig
-                .map { it.appThemeMode }
-                .collectAsState(initial = initialThemeMode)
+            val appThemeModeFlow = remember(settingsRepository) {
+                settingsRepository.serverConfig.map { it.appThemeMode }
+            }
+            val appThemeMode by appThemeModeFlow.collectAsState(initial = initialThemeMode)
 
             AutoFishTheme(
                 darkTheme = appThemeMode == AppThemeMode.DARK,

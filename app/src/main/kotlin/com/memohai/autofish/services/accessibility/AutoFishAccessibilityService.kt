@@ -35,7 +35,8 @@ class AutoFishAccessibilityService : AccessibilityService() {
         }
     }
 
-    override fun onInterrupt() {}
+    @Suppress("EmptyFunctionBlock")
+    override fun onInterrupt() = Unit
 
     override fun onDestroy() {
         instance = null
@@ -56,7 +57,7 @@ class AutoFishAccessibilityService : AccessibilityService() {
         )
     }
 
-    fun canTakeScreenshot(): Boolean = true
+    val canTakeScreenshot: Boolean = true
 
     private fun shouldMarkUiDirty(eventType: Int): Boolean = when (eventType) {
         AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,

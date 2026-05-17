@@ -68,7 +68,15 @@ class RefAliasMappingTest {
     @Test
     fun `find by token should recover by identity when layout changed`() {
         val previous = listOf(
-            refNode(ref = "@n4", nodeId = "node-a", left = 0, top = 100, right = 100, bottom = 200, text = "Airplane mode"),
+            refNode(
+                ref = "@n4",
+                nodeId = "node-a",
+                left = 0,
+                top = 100,
+                right = 100,
+                bottom = 200,
+                text = "Airplane mode",
+            ),
         )
         val observed = buildObservedRefTokenMap(
             refs = previous,
@@ -79,7 +87,15 @@ class RefAliasMappingTest {
         assertNotNull(recordedToken)
 
         val current = listOf(
-            refNode(ref = "@n5", nodeId = "node-a-new-pos", left = 0, top = 260, right = 100, bottom = 360, text = "Airplane mode"),
+            refNode(
+                ref = "@n5",
+                nodeId = "node-a-new-pos",
+                left = 0,
+                top = 260,
+                right = 100,
+                bottom = 360,
+                text = "Airplane mode",
+            ),
         )
         val target = findRefNodeByToken(
             refs = current,
@@ -122,6 +138,7 @@ class RefAliasMappingTest {
         assertNull(target)
     }
 
+    @Suppress("LongParameterList")
     private fun refNode(
         ref: String,
         nodeId: String,

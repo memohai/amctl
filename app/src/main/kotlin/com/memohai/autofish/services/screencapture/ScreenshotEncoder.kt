@@ -16,8 +16,8 @@ class ScreenshotEncoder
         }
 
         fun encodeBitmapToJpeg(bitmap: Bitmap, quality: Int): ByteArray {
-            val clamped = quality.coerceIn(1, 100)
-            val stream = ByteArrayOutputStream(bitmap.width * bitmap.height / 4)
+            val clamped = quality.coerceIn(MIN_JPEG_QUALITY, MAX_JPEG_QUALITY)
+            val stream = ByteArrayOutputStream(bitmap.width * bitmap.height / JPEG_BUFFER_SIZE_DIVISOR)
             bitmap.compress(Bitmap.CompressFormat.JPEG, clamped, stream)
             return stream.toByteArray()
         }
@@ -45,5 +45,11 @@ class ScreenshotEncoder
             val safeH = targetH.coerceAtLeast(1)
             if (safeW == origW && safeH == origH) return bitmap
             return Bitmap.createScaledBitmap(bitmap, safeW, safeH, true)
+        }
+
+        companion object {
+            private const val MIN_JPEG_QUALITY = 1
+            private const val MAX_JPEG_QUALITY = 100
+            private const val JPEG_BUFFER_SIZE_DIVISOR = 4
         }
     }

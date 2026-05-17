@@ -17,7 +17,7 @@ class ShellScreenCapture
             } else {
                 null
             }
-        } catch (e: Exception) {
+        } catch (e: ShizukuExecutionException) {
             Log.w(TAG, "Shell screencap failed", e)
             null
         }

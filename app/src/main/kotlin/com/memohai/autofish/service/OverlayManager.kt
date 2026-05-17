@@ -14,6 +14,8 @@ import com.memohai.autofish.services.accessibility.BoundsData
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+private const val MAIN_THREAD_WAIT_TIMEOUT_MS = 300L
+
 data class OverlayMark(
     val index: Int,
     val label: String,
@@ -74,57 +76,63 @@ class OverlayManager {
         if (offsetY != null) {
             this.offsetY = offsetY
         }
-        if (target == enabled) {
-            if (target) {
-                val view = overlayView
-                if (view != null) {
-                    runOnMainAndWait {
-                        view.setRenderOffset(this.offsetX.toFloat(), this.offsetY.toFloat())
-                    }
-                }
-                updateMarks(lastMarks)
-            }
-            return Result.success(Unit)
-        }
         val service = AutoFishAccessibilityService.instance
-            ?: return Result.failure(IllegalStateException("Accessibility service not available"))
-        val wm = service.getSystemService(WindowManager::class.java)
-            ?: return Result.failure(IllegalStateException("WindowManager not available"))
+        val wm = service?.getSystemService(WindowManager::class.java)
+        return when {
+            target == enabled -> refreshIfEnabled(target)
+            service == null -> Result.failure(IllegalStateException("Accessibility service not available"))
+            wm == null -> Result.failure(IllegalStateException("WindowManager not available"))
+            target -> enableOverlay(service, wm)
+            else -> disableOverlay(wm)
+        }
+    }
 
-        return if (target) {
-            val view = MarkOverlayView(service).apply {
-                setMarks(lastMarks)
-                setRenderOffset(this@OverlayManager.offsetX.toFloat(), this@OverlayManager.offsetY.toFloat())
-            }
-            val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                android.graphics.PixelFormat.TRANSLUCENT,
-            )
-            params.gravity = android.view.Gravity.TOP or android.view.Gravity.START
-            runOnMainAndWait {
-                wm.addView(view, params)
-                overlayView = view
-                enabled = true
-            }
-            Result.success(Unit)
-        } else {
-            val view = overlayView
-            if (view != null) {
+    private fun refreshIfEnabled(target: Boolean): Result<Unit> {
+        if (target) {
+            overlayView?.let { view ->
                 runOnMainAndWait {
-                    wm.removeView(view)
-                    overlayView = null
-                    enabled = false
+                    view.setRenderOffset(offsetX.toFloat(), offsetY.toFloat())
                 }
-            } else {
+            }
+            updateMarks(lastMarks)
+        }
+        return Result.success(Unit)
+    }
+
+    private fun enableOverlay(service: AccessibilityService, wm: WindowManager): Result<Unit> {
+        val view = MarkOverlayView(service).apply {
+            setMarks(lastMarks)
+            setRenderOffset(this@OverlayManager.offsetX.toFloat(), this@OverlayManager.offsetY.toFloat())
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        )
+        params.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+        runOnMainAndWait {
+            wm.addView(view, params)
+            overlayView = view
+            enabled = true
+        }
+        return Result.success(Unit)
+    }
+
+    private fun disableOverlay(wm: WindowManager): Result<Unit> {
+        overlayView?.let { view ->
+            runOnMainAndWait {
+                wm.removeView(view)
+                overlayView = null
                 enabled = false
             }
-            Result.success(Unit)
+        } ?: run {
+            enabled = false
         }
+        return Result.success(Unit)
     }
 
     private fun runOnMainAndWait(block: () -> Unit) {
@@ -141,7 +149,7 @@ class OverlayManager {
                 done.countDown()
             }
         }
-        done.await(300, TimeUnit.MILLISECONDS)
+        done.await(MAIN_THREAD_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
     }
 }
 
@@ -151,7 +159,7 @@ private class MarkOverlayView(
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#4CAF50")
         style = Paint.Style.STROKE
-        strokeWidth = 3f
+        strokeWidth = DEFAULT_STROKE_WIDTH
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.TRANSPARENT
@@ -163,11 +171,11 @@ private class MarkOverlayView(
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 25f
+        textSize = LABEL_TEXT_SIZE
         style = Paint.Style.FILL
     }
     private val textBounds = Rect()
-    private val occupiedLabels = ArrayList<RectF>(64)
+    private val occupiedLabels = ArrayList<RectF>(INITIAL_LABEL_CAPACITY)
     private var marks: List<OverlayMark> = emptyList()
     private var renderOffsetX = 0f
     private var renderOffsetY = 0f
@@ -182,6 +190,7 @@ private class MarkOverlayView(
         invalidate()
     }
 
+    @Suppress("LongMethod")
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         canvas.save()
@@ -196,7 +205,11 @@ private class MarkOverlayView(
             val strokeColor = palette.stroke
             val fillColor = withAlpha(strokeColor, FILL_ALPHA)
             strokePaint.color = strokeColor
-            strokePaint.strokeWidth = if (mark.interactive) 4f else 2f
+            strokePaint.strokeWidth = if (mark.interactive) {
+                INTERACTIVE_STROKE_WIDTH
+            } else {
+                PASSIVE_STROKE_WIDTH
+            }
             fillPaint.color = fillColor
             canvas.drawRect(
                 b.left.toFloat(),
@@ -215,7 +228,7 @@ private class MarkOverlayView(
 
             val text = mark.label
             textPaint.getTextBounds(text, 0, text.length, textBounds)
-            val padding = 8f
+            val padding = LABEL_PADDING
             val labelWidth = textBounds.width() + padding * 2
             val labelHeight = textBounds.height() + padding * 2
 
@@ -250,7 +263,7 @@ private class MarkOverlayView(
                 ?: preferred.first()
             occupiedLabels.add(rect)
             bgPaint.color = withAlpha(strokeColor, LABEL_BG_ALPHA)
-            canvas.drawRoundRect(rect, 6f, 6f, bgPaint)
+            canvas.drawRoundRect(rect, LABEL_CORNER_RADIUS, LABEL_CORNER_RADIUS, bgPaint)
             canvas.drawText(text, rect.left + padding, rect.bottom - padding, textPaint)
         }
         canvas.restore()
@@ -258,12 +271,19 @@ private class MarkOverlayView(
 
     private fun overlapsExisting(target: RectF): Boolean = occupiedLabels.any { RectF.intersects(it, target) }
 
+    @Suppress("CyclomaticComplexMethod")
     private fun paletteFor(mark: OverlayMark): Palette {
         val className = mark.className ?: ""
         return when {
-            mark.interactive && (className.contains("EditText", ignoreCase = true) || className.contains("TextField", ignoreCase = true)) ->
+            mark.interactive && (
+                className.contains("EditText", ignoreCase = true) ||
+                    className.contains("TextField", ignoreCase = true)
+            ) ->
                 Palette(Color.parseColor("#00BCD4"))
-            mark.interactive && (className.contains("Button", ignoreCase = true) || className.contains("ImageButton", ignoreCase = true)) ->
+            mark.interactive && (
+                className.contains("Button", ignoreCase = true) ||
+                    className.contains("ImageButton", ignoreCase = true)
+            ) ->
                 Palette(Color.parseColor("#FF9800"))
             mark.interactive && (
                 className.contains("CheckBox", ignoreCase = true) ||
@@ -287,13 +307,22 @@ private class MarkOverlayView(
     }
 
     private fun withAlpha(color: Int, alpha: Int): Int {
-        val a = alpha.coerceIn(0, 255)
+        val a = alpha.coerceIn(MIN_ALPHA, MAX_ALPHA)
         return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
     }
 
     private data class Palette(val stroke: Int)
 
     companion object {
+        private const val DEFAULT_STROKE_WIDTH = 3f
+        private const val INTERACTIVE_STROKE_WIDTH = 4f
+        private const val PASSIVE_STROKE_WIDTH = 2f
+        private const val LABEL_TEXT_SIZE = 25f
+        private const val INITIAL_LABEL_CAPACITY = 64
+        private const val LABEL_PADDING = 8f
+        private const val LABEL_CORNER_RADIUS = 6f
+        private const val MIN_ALPHA = 0
+        private const val MAX_ALPHA = 255
         private const val FILL_ALPHA = 26
         private const val LABEL_BG_ALPHA = 196
     }

@@ -15,26 +15,30 @@ import kotlin.coroutines.resume
 @Suppress("TooManyFunctions")
 class ActionExecutorImpl
     @Inject
-    constructor(
-        private val treeParser: AccessibilityTreeParser,
-    ) : ActionExecutor {
+    constructor() : ActionExecutor {
         override suspend fun clickNode(nodeId: String, windows: List<WindowData>): Result<Unit> =
             performNodeAction(nodeId, windows) { realNode ->
-                if (!realNode.isClickable) return@performNodeAction Result.failure(IllegalStateException("Node not clickable"))
+                if (!realNode.isClickable) {
+                    return@performNodeAction Result.failure(IllegalStateException("Node not clickable"))
+                }
                 if (realNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)) Result.success(Unit)
                 else Result.failure(RuntimeException("ACTION_CLICK failed"))
             }
 
         override suspend fun longClickNode(nodeId: String, windows: List<WindowData>): Result<Unit> =
             performNodeAction(nodeId, windows) { realNode ->
-                if (!realNode.isLongClickable) return@performNodeAction Result.failure(IllegalStateException("Node not long-clickable"))
+                if (!realNode.isLongClickable) {
+                    return@performNodeAction Result.failure(IllegalStateException("Node not long-clickable"))
+                }
                 if (realNode.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) Result.success(Unit)
                 else Result.failure(RuntimeException("ACTION_LONG_CLICK failed"))
             }
 
         override suspend fun setTextOnNode(nodeId: String, text: String, windows: List<WindowData>): Result<Unit> =
             performNodeAction(nodeId, windows) { realNode ->
-                if (!realNode.isEditable) return@performNodeAction Result.failure(IllegalStateException("Node not editable"))
+                if (!realNode.isEditable) {
+                    return@performNodeAction Result.failure(IllegalStateException("Node not editable"))
+                }
                 val args = Bundle().apply {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
                 }
@@ -42,10 +46,16 @@ class ActionExecutorImpl
                 else Result.failure(RuntimeException("ACTION_SET_TEXT failed"))
             }
 
-        override suspend fun scrollNode(nodeId: String, direction: ScrollDirection, windows: List<WindowData>): Result<Unit> =
+        override suspend fun scrollNode(
+            nodeId: String,
+            direction: ScrollDirection,
+            windows: List<WindowData>,
+        ): Result<Unit> =
             performNodeAction(nodeId, windows) { realNode ->
                 val scrollable = findScrollableAncestor(realNode) ?: realNode.takeIf { it.isScrollable }
-                if (scrollable == null) return@performNodeAction Result.failure(IllegalStateException("No scrollable ancestor found"))
+                if (scrollable == null) {
+                    return@performNodeAction Result.failure(IllegalStateException("No scrollable ancestor found"))
+                }
                 val action = when (direction) {
                     ScrollDirection.UP, ScrollDirection.LEFT -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
                     ScrollDirection.DOWN, ScrollDirection.RIGHT -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
@@ -116,7 +126,7 @@ class ActionExecutorImpl
         override suspend fun pressHome(): Result<Unit> =
             performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
 
-        @Suppress("ReturnCount")
+        @Suppress("ReturnCount", "NestedBlockDepth")
         private suspend fun performNodeAction(
             nodeId: String,
             windows: List<WindowData>,
@@ -128,20 +138,21 @@ class ActionExecutorImpl
             if (realWindows.isNotEmpty()) {
                 val realWindowById = realWindows.associateBy { it.id }
                 for (windowData in windows) {
-                    val realWindow = realWindowById[windowData.windowId] ?: continue
-                    val realRootNode = realWindow.root ?: continue
-                    val realNode = findNodeByWalk(realRootNode, windowData.tree, nodeId)
-                    if (realNode != null) {
-                        return try {
-                            action(realNode)
-                        } finally {
-                            if (realNode !== realRootNode) {
-                                @Suppress("DEPRECATION") realNode.recycle()
+                    val realRootNode = realWindowById[windowData.windowId]?.root
+                    if (realRootNode != null) {
+                        val realNode = findNodeByWalk(realRootNode, windowData.tree, nodeId)
+                        if (realNode != null) {
+                            return try {
+                                action(realNode)
+                            } finally {
+                                if (realNode !== realRootNode) {
+                                    @Suppress("DEPRECATION") realNode.recycle()
+                                }
+                                @Suppress("DEPRECATION") realRootNode.recycle()
                             }
-                            @Suppress("DEPRECATION") realRootNode.recycle()
                         }
+                        @Suppress("DEPRECATION") realRootNode.recycle()
                     }
-                    @Suppress("DEPRECATION") realRootNode.recycle()
                 }
             }
             val rootNode = service.rootInActiveWindow
@@ -197,12 +208,17 @@ class ActionExecutorImpl
                         override fun onCompleted(desc: GestureDescription?) {
                             if (continuation.isActive) continuation.resume(Result.success(Unit))
                         }
+
                         override fun onCancelled(desc: GestureDescription?) {
-                            if (continuation.isActive) continuation.resume(Result.failure(RuntimeException("Gesture cancelled")))
+                            if (continuation.isActive) {
+                                continuation.resume(Result.failure(RuntimeException("Gesture cancelled")))
+                            }
                         }
                     }
                     if (!service.dispatchGesture(gesture, callback, null)) {
-                        if (continuation.isActive) continuation.resume(Result.failure(RuntimeException("Failed to dispatch gesture")))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.failure(RuntimeException("Failed to dispatch gesture")))
+                        }
                     }
                 }
             } ?: Result.failure(RuntimeException("Gesture timed out"))

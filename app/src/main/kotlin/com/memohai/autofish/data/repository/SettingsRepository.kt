@@ -6,6 +6,7 @@ import com.memohai.autofish.data.model.AppThemeMode
 import com.memohai.autofish.data.model.ServerConfig
 import kotlinx.coroutines.flow.Flow
 
+@Suppress("TooManyFunctions")
 interface SettingsRepository {
     val serverConfig: Flow<ServerConfig>
 

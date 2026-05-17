@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
+@Suppress("TooManyFunctions")
 class ServiceServerService : Service() {
     @Inject
     lateinit var settingsRepository: SettingsRepository
@@ -78,7 +79,8 @@ class ServiceServerService : Service() {
             runningInstance?.setRefVisibleInternal(visible)
         }
 
-        fun getRefPanelState(limit: Int = 120): ServiceServer.RefPanelStatePayload? = runningInstance?.getRefPanelStateInternal(limit)
+        fun getRefPanelState(limit: Int = 120): ServiceServer.RefPanelStatePayload? =
+            runningInstance?.getRefPanelStateInternal(limit)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

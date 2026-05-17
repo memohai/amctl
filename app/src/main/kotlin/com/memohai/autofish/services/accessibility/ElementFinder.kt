@@ -28,20 +28,15 @@ class ElementFinder
         }
 
         fun findNodeById(windows: List<WindowData>, nodeId: String): AccessibilityNodeData? {
-            for (windowData in windows) {
-                val found = findNodeById(windowData.tree, nodeId)
-                if (found != null) return found
-            }
-            return null
+            return windows.firstNotNullOfOrNull { findNodeById(it.tree, nodeId) }
         }
 
         fun findNodeById(tree: AccessibilityNodeData, nodeId: String): AccessibilityNodeData? {
-            if (tree.id == nodeId) return tree
-            for (child in tree.children) {
-                val found = findNodeById(child, nodeId)
-                if (found != null) return found
+            return if (tree.id == nodeId) {
+                tree
+            } else {
+                tree.children.firstNotNullOfOrNull { findNodeById(it, nodeId) }
             }
-            return null
         }
 
         private fun searchRecursive(

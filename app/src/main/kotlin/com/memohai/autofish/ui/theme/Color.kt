@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber")
+
 package com.memohai.autofish.ui.theme
 
 import androidx.compose.ui.graphics.Color

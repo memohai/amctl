@@ -23,6 +23,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
+@Suppress("FunctionNaming")
 fun AutoFishTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,

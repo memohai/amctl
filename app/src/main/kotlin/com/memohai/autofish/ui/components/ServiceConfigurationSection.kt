@@ -30,6 +30,7 @@ import com.memohai.autofish.data.model.ServerConfig
 import kotlinx.coroutines.launch
 
 @Composable
+@Suppress("FunctionNaming")
 fun ServiceConfigurationSection(
     config: ServerConfig,
     isServerRunning: Boolean,

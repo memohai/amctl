@@ -106,6 +106,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("FunctionNaming", "LongMethod", "CyclomaticComplexMethod")
 fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
     val serverConfig by viewModel.serverConfig.collectAsState()
     val serviceServerStatus by viewModel.serviceServerStatus.collectAsState()
@@ -341,9 +342,15 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                         isServiceRunning = isServiceRunning,
                     )
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.control_mode), style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    stringResource(R.string.control_mode),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
                                 Text(
                                     text = "  $controlMode",
                                     style = MaterialTheme.typography.bodyMedium,
@@ -373,10 +380,20 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                         }
                     }
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(stringResource(R.string.accessibility_service), style = MaterialTheme.typography.titleMedium)
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
                             Text(
-                                text = if (accessibilityEnabled) stringResource(R.string.enabled) else stringResource(R.string.disabled),
+                                stringResource(R.string.accessibility_service),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = if (accessibilityEnabled) {
+                                    stringResource(R.string.enabled)
+                                } else {
+                                    stringResource(R.string.disabled)
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (accessibilityEnabled) {
                                     MaterialTheme.colorScheme.primary
@@ -436,7 +453,9 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                             .fillMaxWidth()
                                             .clickable { selectedSettingPage = SettingPage.App },
                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                        trailingContent = { Text(">", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                        trailingContent = {
+                                            Text(">", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        },
                                     )
 
                                     ListItem(
@@ -446,7 +465,9 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                             .fillMaxWidth()
                                             .clickable { selectedSettingPage = SettingPage.Service },
                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                        trailingContent = { Text(">", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                        trailingContent = {
+                                            Text(">", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        },
                                     )
 
                                     ListItem(
@@ -456,7 +477,9 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                             .fillMaxWidth()
                                             .clickable { selectedSettingPage = SettingPage.About },
                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                        trailingContent = { Text(">", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                        trailingContent = {
+                                            Text(">", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        },
                                     )
                                 }
                             }
@@ -471,12 +494,23 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                             )
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                ),
                             ) {
-                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text(stringResource(R.string.app_details), style = MaterialTheme.typography.titleMedium)
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.app_details),
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
 
-                                    Text(stringResource(R.string.language), style = MaterialTheme.typography.labelLarge)
+                                    Text(
+                                        stringResource(R.string.language),
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         RadioButton(
                                             selected = serverConfig.appLanguage == AppLanguage.SYSTEM,
@@ -487,7 +521,10 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                                 }
                                             },
                                         )
-                                        Text(stringResource(R.string.follow_system), modifier = Modifier.padding(end = 12.dp))
+                                        Text(
+                                            stringResource(R.string.follow_system),
+                                            modifier = Modifier.padding(end = 12.dp),
+                                        )
                                         RadioButton(
                                             selected = serverConfig.appLanguage == AppLanguage.CHINESE,
                                             onClick = {
@@ -497,7 +534,10 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                                 }
                                             },
                                         )
-                                        Text(stringResource(R.string.language_zh), modifier = Modifier.padding(end = 12.dp))
+                                        Text(
+                                            stringResource(R.string.language_zh),
+                                            modifier = Modifier.padding(end = 12.dp),
+                                        )
                                         RadioButton(
                                             selected = serverConfig.appLanguage == AppLanguage.ENGLISH,
                                             onClick = {
@@ -510,13 +550,19 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                         Text(stringResource(R.string.language_en))
                                     }
 
-                                    Text(stringResource(R.string.theme), style = MaterialTheme.typography.labelLarge)
+                                    Text(
+                                        stringResource(R.string.theme),
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         RadioButton(
                                             selected = serverConfig.appThemeMode == AppThemeMode.LIGHT,
                                             onClick = { viewModel.updateAppThemeMode(AppThemeMode.LIGHT) },
                                         )
-                                        Text(stringResource(R.string.theme_light), modifier = Modifier.padding(end = 16.dp))
+                                        Text(
+                                            stringResource(R.string.theme_light),
+                                            modifier = Modifier.padding(end = 16.dp),
+                                        )
                                         RadioButton(
                                             selected = serverConfig.appThemeMode == AppThemeMode.DARK,
                                             onClick = { viewModel.updateAppThemeMode(AppThemeMode.DARK) },
@@ -524,11 +570,22 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                         Text(stringResource(R.string.theme_dark))
                                     }
 
-                                    Text(stringResource(R.string.notifications), style = MaterialTheme.typography.labelLarge)
                                     Text(
-                                        text = if (notificationsEnabled) stringResource(R.string.enabled) else stringResource(R.string.disabled),
+                                        stringResource(R.string.notifications),
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                    Text(
+                                        text = if (notificationsEnabled) {
+                                            stringResource(R.string.enabled)
+                                        } else {
+                                            stringResource(R.string.disabled)
+                                        },
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = if (notificationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        color = if (notificationsEnabled) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.error
+                                        },
                                     )
                                 }
                             }
@@ -549,7 +606,9 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                             )
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                ),
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -580,7 +639,9 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                             }
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                ),
                             ) {
                                 Column(
                                     modifier = Modifier
@@ -644,17 +705,36 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                             )
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                ),
                             ) {
-                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium)
-                                    Text("${stringResource(R.string.app_name_label)}: Autofish", style = MaterialTheme.typography.bodyMedium)
-                                    Text("${stringResource(R.string.version_label)}: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodyMedium)
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
                                     Text(
-                                        "${stringResource(R.string.build_type_label)}: ${if (BuildConfig.DEBUG) "Debug" else "Release"}",
+                                        stringResource(R.string.settings_about),
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    Text(
+                                        "${stringResource(R.string.app_name_label)}: Autofish",
                                         style = MaterialTheme.typography.bodyMedium,
                                     )
-                                    Text("${stringResource(R.string.install_date_label)}: $installDate", style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        "${stringResource(R.string.version_label)}: " +
+                                            "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        "${stringResource(R.string.build_type_label)}: " +
+                                            if (BuildConfig.DEBUG) "Debug" else "Release",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        "${stringResource(R.string.install_date_label)}: $installDate",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
                                 }
                             }
                         }
@@ -666,6 +746,7 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
 }
 
 @Composable
+@Suppress("FunctionNaming", "LongParameterList", "LongMethod", "CyclomaticComplexMethod")
 private fun LogTabContent(
     innerPadding: PaddingValues,
     logs: List<ServiceLogEntry>,
@@ -737,8 +818,12 @@ private fun LogTabContent(
         ) {
             AnimatedVisibility(
                 visible = isSearchVisible,
-                enter = expandVertically(animationSpec = tween(180)) + fadeIn(animationSpec = tween(180)),
-                exit = shrinkVertically(animationSpec = tween(140)) + fadeOut(animationSpec = tween(140)),
+                enter = expandVertically(
+                    animationSpec = tween(LOG_SEARCH_ENTER_ANIMATION_MS),
+                ) + fadeIn(animationSpec = tween(LOG_SEARCH_ENTER_ANIMATION_MS)),
+                exit = shrinkVertically(
+                    animationSpec = tween(LOG_SEARCH_EXIT_ANIMATION_MS),
+                ) + fadeOut(animationSpec = tween(LOG_SEARCH_EXIT_ANIMATION_MS)),
             ) {
                 OutlinedTextField(
                     value = searchQuery,
@@ -815,11 +900,12 @@ private fun LogTabContent(
 }
 
 @Composable
+@Suppress("FunctionNaming")
 private fun LogListItem(entry: ServiceLogEntry) {
     val time = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date(entry.timestampMs))
     val levelColor = when (entry.level.uppercase(Locale.ROOT)) {
         "ERROR" -> MaterialTheme.colorScheme.error
-        "WARN", "WARNING" -> Color(0xFFB26A00)
+        "WARN", "WARNING" -> Color(WARNING_LOG_COLOR)
         "INFO" -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -910,6 +996,10 @@ private enum class SettingPage {
     About,
 }
 
+private const val LOG_SEARCH_ENTER_ANIMATION_MS = 180
+private const val LOG_SEARCH_EXIT_ANIMATION_MS = 140
+private const val WARNING_LOG_COLOR = 0xFFB26A00
+
 private fun Modifier.mouseDragScrollable(
     scrollState: ScrollState,
 ): Modifier = pointerInput(scrollState) {
@@ -918,15 +1008,17 @@ private fun Modifier.mouseDragScrollable(
         if (down.type != PointerType.Mouse) return@awaitEachGesture
 
         var pointerId = down.id
-        while (true) {
+        var dragging = true
+        while (dragging) {
             val event = awaitPointerEvent()
-            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-            if (!change.pressed) break
-
-            val dy = change.positionChange().y
-            if (dy != 0f) {
-                scrollState.dispatchRawDelta(-dy)
-                change.consume()
+            val change = event.changes.firstOrNull { it.id == pointerId }
+            dragging = change?.pressed == true
+            if (change != null && dragging) {
+                val dy = change.positionChange().y
+                if (dy != 0f) {
+                    scrollState.dispatchRawDelta(-dy)
+                    change.consume()
+                }
             }
         }
     }

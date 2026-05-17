@@ -36,6 +36,16 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
+private const val FORCE_REF_REBUILD_INTERVAL_MS = 1_500L
+private const val DEFAULT_OBSERVE_MAX_ROWS = 120
+private const val DEFAULT_MAX_MARKS = 120
+private const val DEFAULT_SCREENSHOT_MAX_DIM = 700
+private const val DEFAULT_SCREENSHOT_QUALITY = 80
+private const val MIN_REFRESH_INTERVAL_MS = 200L
+private const val MAX_REFRESH_INTERVAL_MS = 5_000L
+private const val REF_TOKEN_COORDINATE_GRID = 8
+private const val HASH_RADIX = 16
+
 internal fun shouldRebuildRefs(
     hasCachedRefs: Boolean,
     uiSeqChanged: Boolean,
@@ -43,10 +53,10 @@ internal fun shouldRebuildRefs(
     lastComputedAtMs: Long,
     forceIntervalMs: Long,
 ): Boolean {
-    if (!hasCachedRefs) return true
-    if (uiSeqChanged) return true
-    if (lastComputedAtMs <= 0L) return true
-    return nowMs - lastComputedAtMs >= forceIntervalMs
+    return !hasCachedRefs ||
+        uiSeqChanged ||
+        lastComputedAtMs <= 0L ||
+        nowMs - lastComputedAtMs >= forceIntervalMs
 }
 
 internal fun stableObservedTopActivity(before: String?, after: String?): String? {
@@ -91,6 +101,7 @@ internal fun findRefNodeByToken(
     return identityMatches.singleOrNull()
 }
 
+@Suppress("LongParameterList", "LargeClass", "TooManyFunctions")
 class ServiceServer(
     private val port: Int,
     private val bindAddress: String,
@@ -119,7 +130,7 @@ class ServiceServer(
     private var lastRefUiChangeSeq: Long = -1L
     @Volatile
     private var lastRefComputedAtMs: Long = 0L
-    private val forceRefRebuildIntervalMs = 1_500L
+    private val forceRefRebuildIntervalMs = FORCE_REF_REBUILD_INTERVAL_MS
 
     fun start() {
         server = embeddedServer(Netty, port = port, host = bindAddress) {
@@ -159,17 +170,14 @@ class ServiceServer(
     }
 
     @Synchronized
-    fun setOverlayVisible(visible: Boolean): Result<OverlayStatePayload> {
-        if (!visible) {
-            stopOverlayAutoRefresh()
-            val result = overlayManager.setEnabled(false)
-            if (result.isFailure) {
-                return Result.failure(result.exceptionOrNull() ?: IllegalStateException("Overlay disable failed"))
-            }
-            overlayConfig = overlayConfig.copy(enabled = false)
-            return Result.success(overlayManager.state().toPayload())
+    fun setOverlayVisible(visible: Boolean): Result<OverlayStatePayload> =
+        if (visible) {
+            enableOverlay()
+        } else {
+            disableOverlay()
         }
 
+    private fun enableOverlay(): Result<OverlayStatePayload> {
         val snapshot = collectScreenSnapshot()
         val marks = buildMarks(
             windows = snapshot.windows,
@@ -182,16 +190,28 @@ class ServiceServer(
             offsetX = overlayConfig.offsetX,
             offsetY = overlayConfig.offsetY,
         )
-        if (result.isFailure) {
-            return Result.failure(result.exceptionOrNull() ?: IllegalStateException("Overlay enable failed"))
-        }
-        overlayConfig = overlayConfig.copy(enabled = true)
-        if (overlayConfig.autoRefresh) {
-            startOverlayAutoRefresh()
+        return if (result.isFailure) {
+            Result.failure(result.exceptionOrNull() ?: IllegalStateException("Overlay enable failed"))
         } else {
-            stopOverlayAutoRefresh()
+            overlayConfig = overlayConfig.copy(enabled = true)
+            if (overlayConfig.autoRefresh) {
+                startOverlayAutoRefresh()
+            } else {
+                stopOverlayAutoRefresh()
+            }
+            Result.success(overlayManager.state().toPayload())
         }
-        return Result.success(overlayManager.state().toPayload())
+    }
+
+    private fun disableOverlay(): Result<OverlayStatePayload> {
+        stopOverlayAutoRefresh()
+        val result = overlayManager.setEnabled(false)
+        return if (result.isFailure) {
+            Result.failure(result.exceptionOrNull() ?: IllegalStateException("Overlay disable failed"))
+        } else {
+            overlayConfig = overlayConfig.copy(enabled = false)
+            Result.success(overlayManager.state().toPayload())
+        }
     }
 
     @Synchronized
@@ -200,7 +220,9 @@ class ServiceServer(
         if (visible) {
             val overlayRes = setOverlayVisible(true)
             if (overlayRes.isFailure) {
-                return Result.failure(overlayRes.exceptionOrNull() ?: IllegalStateException("Failed to enable overlay for refs"))
+                return Result.failure(
+                    overlayRes.exceptionOrNull() ?: IllegalStateException("Failed to enable overlay for refs"),
+                )
             }
         } else if (overlayConfig.enabled) {
             val snapshot = collectScreenSnapshot()
@@ -220,12 +242,14 @@ class ServiceServer(
     private fun ok(data: String) = json.encodeToString(ApiResponse.serializer(), ApiResponse(ok = true, data = data))
     private fun err(msg: String) = json.encodeToString(ApiResponse.serializer(), ApiResponse(ok = false, error = msg))
 
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private fun io.ktor.server.routing.Route.screenRoutes() {
         get("/observe") {
             val include = (call.request.queryParameters["include"] ?: "top,screen")
                 .split(",").map { it.trim().lowercase() }.toSet()
-            val maxRows = clampObserveMaxRows(call.request.queryParameters["max_rows"]?.toIntOrNull() ?: 120)
+            val maxRows = clampObserveMaxRows(
+                call.request.queryParameters["max_rows"]?.toIntOrNull() ?: DEFAULT_OBSERVE_MAX_ROWS,
+            )
 
             val topActivityBefore = readTopActivityOrNull()
             val snapshot = collectScreenSnapshot()
@@ -335,7 +359,7 @@ class ServiceServer(
         }
 
         get("/mark") {
-            val maxMarks = call.request.queryParameters["max_marks"]?.toIntOrNull() ?: 120
+            val maxMarks = call.request.queryParameters["max_marks"]?.toIntOrNull() ?: DEFAULT_MAX_MARKS
             val interactiveOnly = call.request.queryParameters["interactive_only"]?.toBooleanStrictOrNull() ?: true
             val applyOverlay = call.request.queryParameters["apply_overlay"]?.toBooleanStrictOrNull() ?: false
             val snapshot = collectScreenSnapshot()
@@ -369,11 +393,11 @@ class ServiceServer(
         }
 
         get("/screenshot") {
-            val maxDim = call.request.queryParameters["max_dim"]?.toIntOrNull() ?: 700
-            val quality = call.request.queryParameters["quality"]?.toIntOrNull() ?: 80
+            val maxDim = call.request.queryParameters["max_dim"]?.toIntOrNull() ?: DEFAULT_SCREENSHOT_MAX_DIM
+            val quality = call.request.queryParameters["quality"]?.toIntOrNull() ?: DEFAULT_SCREENSHOT_QUALITY
             val annotate = call.request.queryParameters["annotate"]?.toBooleanStrictOrNull() ?: false
             val hideOverlay = call.request.queryParameters["hide_overlay"]?.toBooleanStrictOrNull() ?: !annotate
-            val maxMarks = call.request.queryParameters["max_marks"]?.toIntOrNull() ?: 120
+            val maxMarks = call.request.queryParameters["max_marks"]?.toIntOrNull() ?: DEFAULT_MAX_MARKS
             val interactiveOnly = call.request.queryParameters["interactive_only"]?.toBooleanStrictOrNull() ?: true
 
             val overlayStateBefore = overlayManager.state()
@@ -423,14 +447,24 @@ class ServiceServer(
                 val data = result.getOrThrow()
                 call.respondText(ok(data.data), ContentType.Application.Json)
             } else {
-                call.respondText(err(result.exceptionOrNull()?.message ?: "Screenshot failed"), ContentType.Application.Json, HttpStatusCode.InternalServerError)
+                call.respondText(
+                    err(result.exceptionOrNull()?.message ?: "Screenshot failed"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.InternalServerError,
+                )
             }
         }
     }
 
     @Serializable data class TapRequest(val x: Float, val y: Float)
     @Serializable data class LongPressRequest(val x: Float, val y: Float, val duration: Long = 500)
-    @Serializable data class SwipeRequest(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val duration: Long = 300)
+    @Serializable data class SwipeRequest(
+        val x1: Float,
+        val y1: Float,
+        val x2: Float,
+        val y2: Float,
+        val duration: Long = 300,
+    )
     @Serializable data class ScrollRequest(val direction: String, val amount: String = "medium")
 
     private fun io.ktor.server.routing.Route.touchRoutes() {
@@ -440,7 +474,9 @@ class ServiceServer(
         }
         post("/long-press") {
             val req = call.receive<LongPressRequest>()
-            toolRouter.longPress(req.x, req.y, req.duration).respond(call, "Long pressed (${req.x}, ${req.y})")
+            toolRouter
+                .longPress(req.x, req.y, req.duration)
+                .respond(call, "Long pressed (${req.x}, ${req.y})")
         }
         post("/double-tap") {
             val req = call.receive<TapRequest>()
@@ -453,14 +489,21 @@ class ServiceServer(
         post("/scroll") {
             val req = call.receive<ScrollRequest>()
             val dir = try { ScrollDirection.valueOf(req.direction.uppercase()) } catch (_: Exception) {
-                call.respondText(err("Invalid direction: ${req.direction}"), ContentType.Application.Json, HttpStatusCode.BadRequest); return@post
+                call.respondText(
+                    err("Invalid direction: ${req.direction}"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
+                return@post
             }
             val amt = try { ScrollAmount.valueOf(req.amount.uppercase()) } catch (_: Exception) { ScrollAmount.MEDIUM }
             toolRouter.scroll(dir, amt).respond(call, "Scrolled ${req.direction}")
         }
     }
 
-    @Serializable data class KeyRequest(val key_code: Int)
+    @Serializable
+    @Suppress("ConstructorParameterNaming")
+    data class KeyRequest(val key_code: Int)
 
     private fun io.ktor.server.routing.Route.keyRoutes() {
         post("/press/back") {
@@ -484,39 +527,73 @@ class ServiceServer(
             if (success) {
                 call.respondText(ok("Typed text"), ContentType.Application.Json)
             } else {
-                call.respondText(err("Text input failed"), ContentType.Application.Json, HttpStatusCode.InternalServerError)
+                call.respondText(
+                    err("Text input failed"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.InternalServerError,
+                )
             }
         }
     }
 
-    @Serializable data class FindNodesRequest(val by: String, val value: String, val exact_match: Boolean = false)
-    @Serializable data class NodeIdRequest(val node_id: String)
-    @Serializable data class NodeTapRequest(
+    @Serializable
+    @Suppress("ConstructorParameterNaming")
+    data class FindNodesRequest(val by: String, val value: String, val exact_match: Boolean = false)
+
+    @Serializable
+    @Suppress("ConstructorParameterNaming")
+    data class NodeIdRequest(val node_id: String)
+
+    @Serializable
+    @Suppress("ConstructorParameterNaming")
+    data class NodeTapRequest(
         val by: String,
         val value: String,
         val exact_match: Boolean = false,
     )
 
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private fun io.ktor.server.routing.Route.nodeRoutes() {
         post("/nodes/find") {
             val req = call.receive<FindNodesRequest>()
             if (!accessibilityProvider.isReady()) {
-                call.respondText(err("Accessibility not available"), ContentType.Application.Json, HttpStatusCode.ServiceUnavailable); return@post
+                call.respondText(
+                    err("Accessibility not available"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.ServiceUnavailable,
+                )
+                return@post
             }
             val rootNode = accessibilityProvider.getRootNode()
-                ?: run { call.respondText(err("No root node"), ContentType.Application.Json, HttpStatusCode.ServiceUnavailable); return@post }
+                ?: run {
+                    call.respondText(
+                        err("No root node"),
+                        ContentType.Application.Json,
+                        HttpStatusCode.ServiceUnavailable,
+                    )
+                    return@post
+                }
             val tree = treeParser.parseTree(rootNode)
             @Suppress("DEPRECATION") rootNode.recycle()
             val by = normalizeFindBy(req.by)
                 ?: run {
-                call.respondText(err("Invalid by: ${req.by}"), ContentType.Application.Json, HttpStatusCode.BadRequest); return@post
-            }
+                    call.respondText(
+                        err("Invalid by: ${req.by}"),
+                        ContentType.Application.Json,
+                        HttpStatusCode.BadRequest,
+                    )
+                    return@post
+                }
             val elements = elementFinder.findElements(tree, by, req.value, req.exact_match)
             if (elements.isEmpty()) {
-                call.respondText(ok("No nodes found matching ${req.by}='${req.value}'"), ContentType.Application.Json)
+                call.respondText(
+                    ok("No nodes found matching ${req.by}='${req.value}'"),
+                    ContentType.Application.Json,
+                )
             } else {
                 val text = elements.joinToString("\n") { e ->
-                    "${e.id}\t${e.className}\ttext=${e.text}\tdesc=${e.contentDescription}\tres=${e.resourceId}\tbounds=${e.bounds}"
+                    "${e.id}\t${e.className}\ttext=${e.text}\tdesc=${e.contentDescription}" +
+                        "\tres=${e.resourceId}\tbounds=${e.bounds}"
                 }
                 call.respondText(ok("Found ${elements.size} node(s):\n$text"), ContentType.Application.Json)
             }
@@ -525,15 +602,32 @@ class ServiceServer(
         post("/nodes/click") {
             val req = call.receive<NodeIdRequest>()
             if (!accessibilityProvider.isReady()) {
-                call.respondText(err("Accessibility not available"), ContentType.Application.Json, HttpStatusCode.ServiceUnavailable); return@post
+                call.respondText(
+                    err("Accessibility not available"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.ServiceUnavailable,
+                )
+                return@post
             }
             val rootNode = accessibilityProvider.getRootNode()
-                ?: run { call.respondText(err("No root node"), ContentType.Application.Json, HttpStatusCode.ServiceUnavailable); return@post }
+                ?: run {
+                    call.respondText(
+                        err("No root node"),
+                        ContentType.Application.Json,
+                        HttpStatusCode.ServiceUnavailable,
+                    )
+                    return@post
+                }
             val tree = treeParser.parseTree(rootNode)
             @Suppress("DEPRECATION") rootNode.recycle()
             val node = elementFinder.findNodeById(tree, req.node_id)
             if (node == null) {
-                call.respondText(err("Node not found: ${req.node_id}"), ContentType.Application.Json, HttpStatusCode.NotFound); return@post
+                call.respondText(
+                    err("Node not found: ${req.node_id}"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.NotFound,
+                )
+                return@post
             }
             val b = node.bounds
             val cx = (b.left + b.right) / 2f
@@ -544,7 +638,11 @@ class ServiceServer(
         post("/nodes/tap") {
             val req = call.receive<NodeTapRequest>()
             if (req.value.isBlank()) {
-                call.respondText(err("value must not be empty"), ContentType.Application.Json, HttpStatusCode.BadRequest)
+                call.respondText(
+                    err("value must not be empty"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
                 return@post
             }
             val by = normalizeSemanticTapBy(req.by)
@@ -596,7 +694,11 @@ class ServiceServer(
             }
             val snapshot = collectScreenSnapshot()
             if (snapshot.windows.isEmpty()) {
-                call.respondText(err("Accessibility not available"), ContentType.Application.Json, HttpStatusCode.ServiceUnavailable)
+                call.respondText(
+                    err("Accessibility not available"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.ServiceUnavailable,
+                )
                 return@post
             }
             val orderedWindows = snapshot.windows.sortedWith(
@@ -616,7 +718,9 @@ class ServiceServer(
                 candidates.isEmpty() -> {
                     call.respondText(
                         err(
-                            "ASSERTION_FAILED: no clickable node matched by=$byNormalized value='${req.value}' exact_match=${req.exact_match}; matched_count=${matched.size}, candidate_count=0",
+                            "ASSERTION_FAILED: no clickable node matched by=$byNormalized " +
+                                "value='${req.value}' exact_match=${req.exact_match}; " +
+                                "matched_count=${matched.size}, candidate_count=0",
                         ),
                         ContentType.Application.Json,
                         HttpStatusCode.Conflict,
@@ -627,7 +731,9 @@ class ServiceServer(
                 candidates.size > 1 -> {
                     call.respondText(
                         err(
-                            "ASSERTION_FAILED: multiple clickable nodes matched by=$byNormalized value='${req.value}' exact_match=${req.exact_match}; matched_count=${matched.size}, candidate_count=${candidates.size}",
+                            "ASSERTION_FAILED: multiple clickable nodes matched by=$byNormalized " +
+                                "value='${req.value}' exact_match=${req.exact_match}; " +
+                                "matched_count=${matched.size}, candidate_count=${candidates.size}",
                         ),
                         ContentType.Application.Json,
                         HttpStatusCode.Conflict,
@@ -679,10 +785,11 @@ class ServiceServer(
         SemanticTapBy.TEXT -> FindBy.TEXT
         SemanticTapBy.CONTENT_DESC -> FindBy.CONTENT_DESC
         SemanticTapBy.RESOURCE_ID -> FindBy.RESOURCE_ID
-        SemanticTapBy.REF -> throw IllegalStateException("ref is not a FindBy")
+        SemanticTapBy.REF -> error("ref is not a FindBy")
     }
 
     @Serializable
+    @Suppress("ConstructorParameterNaming")
     data class OverlayRequest(
         val enabled: Boolean,
         val max_marks: Int = 300,
@@ -715,6 +822,7 @@ class ServiceServer(
     )
 
     @Serializable
+    @Suppress("ConstructorParameterNaming")
     data class SerializableMark(
         val index: Int,
         val label: String,
@@ -737,6 +845,7 @@ class ServiceServer(
         val marks: List<SerializableMark>,
     )
 
+    @Suppress("LongMethod")
     private fun io.ktor.server.routing.Route.overlayRoutes() {
         get("/overlay") {
             val state = overlayManager.state()
@@ -785,7 +894,10 @@ class ServiceServer(
                 maxMarks = req.max_marks.coerceAtLeast(1),
                 interactiveOnly = req.interactive_only,
                 autoRefresh = req.auto_refresh,
-                refreshIntervalMs = req.refresh_interval_ms.coerceIn(200L, 5_000L),
+                refreshIntervalMs = req.refresh_interval_ms.coerceIn(
+                    MIN_REFRESH_INTERVAL_MS,
+                    MAX_REFRESH_INTERVAL_MS,
+                ),
                 offsetX = resolvedOffsetX,
                 offsetY = resolvedOffsetY,
             )
@@ -982,7 +1094,10 @@ class ServiceServer(
         stopOverlayAutoRefresh()
         val scheduler = Executors.newSingleThreadScheduledExecutor()
         overlayScheduler = scheduler
-        val interval = overlayConfig.refreshIntervalMs.coerceIn(200L, 5_000L)
+        val interval = overlayConfig.refreshIntervalMs.coerceIn(
+            MIN_REFRESH_INTERVAL_MS,
+            MAX_REFRESH_INTERVAL_MS,
+        )
         scheduler.scheduleAtFixedRate(
             {
                 try {
@@ -1101,8 +1216,7 @@ class ServiceServer(
     }
 
     private fun collectRefNodesRecursive(node: AccessibilityNodeData, window: WindowData, out: MutableList<RefNode>) {
-        val interactive = node.clickable || node.longClickable || node.editable || node.scrollable
-        if (interactive && node.enabled && node.visible && area(node.bounds) > 0) {
+        if (node.isRefCandidate()) {
             out.add(
                 RefNode(
                     ref = "",
@@ -1128,12 +1242,18 @@ class ServiceServer(
         }
     }
 
+    private fun AccessibilityNodeData.isRefCandidate(): Boolean {
+        val interactive = listOf(clickable, longClickable, editable, scrollable).any { it }
+        val visibleCandidate = enabled && visible
+        return interactive && visibleCandidate && area(bounds) > 0
+    }
+
     private fun buildRefDigest(refs: List<RefNode>): String =
         refs.joinToString("|") {
-            val coarseLeft = (it.bounds.left / 8) * 8
-            val coarseTop = (it.bounds.top / 8) * 8
-            val coarseRight = (it.bounds.right / 8) * 8
-            val coarseBottom = (it.bounds.bottom / 8) * 8
+            val coarseLeft = coarsenRefCoordinate(it.bounds.left)
+            val coarseTop = coarsenRefCoordinate(it.bounds.top)
+            val coarseRight = coarsenRefCoordinate(it.bounds.right)
+            val coarseBottom = coarsenRefCoordinate(it.bounds.bottom)
             listOf(
                 it.className ?: "",
                 it.text ?: "",
@@ -1148,10 +1268,10 @@ class ServiceServer(
         }
 
     private fun buildRefToken(node: RefNode): String {
-        val coarseLeft = (node.bounds.left / 8) * 8
-        val coarseTop = (node.bounds.top / 8) * 8
-        val coarseRight = (node.bounds.right / 8) * 8
-        val coarseBottom = (node.bounds.bottom / 8) * 8
+        val coarseLeft = coarsenRefCoordinate(node.bounds.left)
+        val coarseTop = coarsenRefCoordinate(node.bounds.top)
+        val coarseRight = coarsenRefCoordinate(node.bounds.right)
+        val coarseBottom = coarsenRefCoordinate(node.bounds.bottom)
         val raw = listOf(
             node.resId ?: "",
             node.className ?: "",
@@ -1161,14 +1281,14 @@ class ServiceServer(
             node.windowLayer.toString(),
             if (node.focused) "1" else "0",
         ).joinToString("|")
-        return "rt_${raw.hashCode().toUInt().toString(16)}"
+        return "rt_${raw.hashCode().toUInt().toString(HASH_RADIX)}"
     }
 
     private fun buildRefIdentityToken(node: RefNode): String {
         val width = (node.bounds.right - node.bounds.left).coerceAtLeast(0)
         val height = (node.bounds.bottom - node.bounds.top).coerceAtLeast(0)
-        val coarseWidth = (width / 8) * 8
-        val coarseHeight = (height / 8) * 8
+        val coarseWidth = coarsenRefCoordinate(width)
+        val coarseHeight = coarsenRefCoordinate(height)
         val raw = listOf(
             node.resId ?: "",
             node.className ?: "",
@@ -1182,8 +1302,11 @@ class ServiceServer(
             node.windowLayer.toString(),
             if (node.focused) "1" else "0",
         ).joinToString("|")
-        return "ri_${raw.hashCode().toUInt().toString(16)}"
+        return "ri_${raw.hashCode().toUInt().toString(HASH_RADIX)}"
     }
+
+    private fun coarsenRefCoordinate(value: Int): Int =
+        (value / REF_TOKEN_COORDINATE_GRID) * REF_TOKEN_COORDINATE_GRID
 
     private fun buildRefFlags(node: RefNode): String = buildString {
         append(if (node.visible) "on" else "off")
@@ -1199,7 +1322,10 @@ class ServiceServer(
         stopRefAutoRefresh()
         val scheduler = Executors.newSingleThreadScheduledExecutor()
         refScheduler = scheduler
-        val interval = refConfig.refreshIntervalMs.coerceIn(200L, 5_000L)
+        val interval = refConfig.refreshIntervalMs.coerceIn(
+            MIN_REFRESH_INTERVAL_MS,
+            MAX_REFRESH_INTERVAL_MS,
+        )
         scheduler.scheduleAtFixedRate(
             {
                 try {
@@ -1245,6 +1371,7 @@ class ServiceServer(
     )
 
     @Serializable
+    @Suppress("ConstructorParameterNaming")
     data class RefRowPayload(
         val ref: String,
         val node_id: String,
@@ -1337,17 +1464,26 @@ class ServiceServer(
         )
     }
 
-    @Serializable data class LaunchRequest(val package_name: String)
-    @Serializable data class StopRequest(val package_name: String)
+    @Serializable
+    @Suppress("ConstructorParameterNaming")
+    data class LaunchRequest(val package_name: String)
+
+    @Serializable
+    @Suppress("ConstructorParameterNaming")
+    data class StopRequest(val package_name: String)
+
     @Serializable data class ShellRequest(val command: String)
+
     @Serializable data class IntentRequest(
         val action: String? = null,
         val data: String? = null,
+        @Suppress("ConstructorParameterNaming")
         val package_name: String? = null,
         val component: String? = null,
         val extras: Map<String, String>? = null,
     )
 
+    @Suppress("LongMethod")
     private fun io.ktor.server.routing.Route.appRoutes() {
         post("/app/launch") {
             val req = call.receive<LaunchRequest>()
@@ -1355,7 +1491,11 @@ class ServiceServer(
             if (result.isSuccess) {
                 call.respondText(ok(result.getOrThrow()), ContentType.Application.Json)
             } else {
-                call.respondText(err(result.exceptionOrNull()?.message ?: "Launch failed"), ContentType.Application.Json, HttpStatusCode.BadRequest)
+                call.respondText(
+                    err(result.exceptionOrNull()?.message ?: "Launch failed"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
             }
         }
 
@@ -1369,7 +1509,11 @@ class ServiceServer(
             if (top != null) {
                 call.respondText(ok(top), ContentType.Application.Json)
             } else {
-                call.respondText(err("Could not determine top activity"), ContentType.Application.Json, HttpStatusCode.InternalServerError)
+                call.respondText(
+                    err("Could not determine top activity"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.InternalServerError,
+                )
             }
         }
 
@@ -1380,7 +1524,11 @@ class ServiceServer(
             if (result.isSuccess) {
                 call.respondText(ok(result.getOrThrow().joinToString("\n")), ContentType.Application.Json)
             } else {
-                call.respondText(err(result.exceptionOrNull()?.message ?: "Failed"), ContentType.Application.Json, HttpStatusCode.InternalServerError)
+                call.respondText(
+                    err(result.exceptionOrNull()?.message ?: "Failed"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.InternalServerError,
+                )
             }
         }
 
@@ -1390,22 +1538,39 @@ class ServiceServer(
             if (result.isSuccess) {
                 call.respondText(ok(result.getOrThrow().ifBlank { "(no output)" }), ContentType.Application.Json)
             } else {
-                call.respondText(err(result.exceptionOrNull()?.message ?: "Shell failed"), ContentType.Application.Json, HttpStatusCode.InternalServerError)
+                call.respondText(
+                    err(result.exceptionOrNull()?.message ?: "Shell failed"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.InternalServerError,
+                )
             }
         }
 
         post("/intent") {
             val req = call.receive<IntentRequest>()
             if (req.action == null && req.data == null && req.component == null) {
-                call.respondText(err("At least one of action, data, or component required"), ContentType.Application.Json, HttpStatusCode.BadRequest); return@post
+                call.respondText(
+                    err("At least one of action, data, or component required"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
+                return@post
             }
             val result = toolRouter.appController.startIntent(
-                action = req.action, dataUri = req.data, packageName = req.package_name, component = req.component, extras = req.extras,
+                action = req.action,
+                dataUri = req.data,
+                packageName = req.package_name,
+                component = req.component,
+                extras = req.extras,
             )
             if (result.isSuccess) {
                 call.respondText(ok(result.getOrThrow()), ContentType.Application.Json)
             } else {
-                call.respondText(err(result.exceptionOrNull()?.message ?: "Intent failed"), ContentType.Application.Json, HttpStatusCode.BadRequest)
+                call.respondText(
+                    err(result.exceptionOrNull()?.message ?: "Intent failed"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
             }
         }
     }
@@ -1414,7 +1579,11 @@ class ServiceServer(
         if (isSuccess) {
             call.respondText(ok(successMsg), ContentType.Application.Json)
         } else {
-            call.respondText(err(exceptionOrNull()?.message ?: "Failed"), ContentType.Application.Json, HttpStatusCode.InternalServerError)
+            call.respondText(
+                err(exceptionOrNull()?.message ?: "Failed"),
+                ContentType.Application.Json,
+                HttpStatusCode.InternalServerError,
+            )
         }
     }
 }

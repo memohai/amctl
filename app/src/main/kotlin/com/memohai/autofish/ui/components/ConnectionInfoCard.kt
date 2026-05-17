@@ -24,7 +24,7 @@ import com.memohai.autofish.R
 import kotlinx.coroutines.launch
 
 @Composable
-@Suppress("FunctionName")
+@Suppress("FunctionName", "LongMethod")
 fun ConnectionInfoCard(
     deviceIp: String?,
     servicePort: Int,
@@ -164,8 +164,12 @@ private fun ConnectionInfoRow(
 }
 
 private fun maskToken(token: String): String =
-    if (token.length <= 12) {
+    if (token.length <= TOKEN_MASK_THRESHOLD) {
         "****"
     } else {
-        "${token.take(6)}...${token.takeLast(4)}"
+        "${token.take(TOKEN_PREFIX_VISIBLE_CHARS)}...${token.takeLast(TOKEN_SUFFIX_VISIBLE_CHARS)}"
     }
+
+private const val TOKEN_MASK_THRESHOLD = 12
+private const val TOKEN_PREFIX_VISIBLE_CHARS = 6
+private const val TOKEN_SUFFIX_VISIBLE_CHARS = 4

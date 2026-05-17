@@ -5,7 +5,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.ktlint)
-    alias(libs.plugins.detekt)
 }
 
 fun Project.gitOutputOrNull(vararg args: String): String? =
@@ -120,6 +119,11 @@ kotlin {
     }
 }
 
+val detektCli by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
 dependencies {
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
@@ -179,6 +183,8 @@ dependencies {
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.sse)
+
+    detektCli(libs.detekt.cli)
 }
 
 tasks.withType<Test> {
@@ -195,4 +201,42 @@ tasks.withType<Test> {
         "--add-opens",
         "java.base/java.time=ALL-UNNAMED",
     )
+}
+
+val detektInputDirs =
+    files(
+        "src/main/kotlin",
+        "src/test/kotlin",
+    )
+val detektReportDir = layout.buildDirectory.dir("reports/detekt")
+
+tasks.register<JavaExec>("detekt") {
+    group = "verification"
+    description = "Run detekt static analysis."
+    classpath = detektCli
+    mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
+
+    inputs.files(detektInputDirs)
+    outputs.dir(detektReportDir)
+
+    val reportDir = detektReportDir.get().asFile
+    doFirst {
+        reportDir.mkdirs()
+    }
+    args(
+        "--input",
+        detektInputDirs.files.joinToString(",") { it.absolutePath },
+        "--report",
+        "md:${reportDir.resolve("detekt.md").absolutePath}",
+        "--report",
+        "html:${reportDir.resolve("detekt.html").absolutePath}",
+        "--report",
+        "xml:${reportDir.resolve("detekt.xml").absolutePath}",
+        "--report",
+        "sarif:${reportDir.resolve("detekt.sarif").absolutePath}",
+    )
+}
+
+tasks.named("check") {
+    dependsOn("detekt")
 }
